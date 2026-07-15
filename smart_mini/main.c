@@ -1,4 +1,5 @@
 #include "include.h"
+#include "test/test.h"
 
 #define UART_BAUD           1500000
 #define UART_BAUD_VAL       (((24000000 + (UART_BAUD / 2)) / UART_BAUD) - 1)
@@ -188,23 +189,12 @@ int main(void)
     PICADR = (u32)&__comm_vma;
     PICCON |= 0x10003;                                  //LOW PRIO interrupt enable
 
-    //以下是测试代码
+    // ================================================================
+    // Phase 1: GPIO 测试
+    // ================================================================
     printf("Hello SMART Flash MiniProj\n");
-
-    printf("test %%d %%i -123: %d %i\n", -123, -123);
-    printf("test %%u 456: %u\n", 456);
-    printf("test %%x %%X 0x12ab: %x %X\n", 0x12ab, 0x12ab);
-
-    printf("test %%ld %%li -12345678: %ld %li\n", -12345678, -12345678);
-    printf("test %%lu 4567890: %lu\n", 4567890);
-    printf("test %%lx %%lX 0xabcd6789: %lx %lX\n", 0xabcd6789, 0xabcd6789);
-
-    printf("test %%4d %%04i -12: %4d %04i\n", -12, -12);
-    printf("test %%-03lu 4567: %-03lu\n", 4567);
-    printf("test %%-8lx %%08lX 0xabcd: %-8lx %08lX\n", 0xabcd, 0xabcd);
-
-    printf("test %%c RT: %c%c\n", 'R', 'T');
-    printf("test %%s: %s\n", "Success");
+    printf("Starting GPIO Test...\n");
+    gpio_test();
 
     while (1);
     return 0;
