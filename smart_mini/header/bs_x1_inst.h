@@ -1,0 +1,216 @@
+#ifndef _BS_X1_INST_H_
+#define _BS_X1_INST_H_
+
+#include "bs_x1_pulp.h"
+
+#define x_opcode            0x57
+
+///2-bit rd register list (rd: Destination register, 64bits)
+#define x_rd_s1s0           (0 << 14)
+#define x_rd_s3s2           (1 << 14)
+#define x_rd_a5a4           (2 << 14)
+#define x_rd_a7a6           (3 << 14)
+
+///4-bit rs register list (rs: Source register)
+#define x_rs_a0             (0 << 16)
+#define x_rs_a1             (1 << 16)
+#define x_rs_a2             (2 << 16)
+#define x_rs_a3             (3 << 16)
+#define x_rs_a4             (4 << 16)
+#define x_rs_a5             (5 << 16)
+#define x_rs_a6             (6 << 16)
+#define x_rs_a7             (7 << 16)
+#define x_rs_s0             (8 << 16)
+#define x_rs_s1             (9 << 16)
+#define x_rs_s2             (10 << 16)
+#define x_rs_s3             (11 << 16)
+#define x_rs_t0             (12 << 16)
+#define x_rs_t1             (13 << 16)
+#define x_rs_t2             (14 << 16)
+#define x_rs_t3             (15 << 16)
+
+///4-bit immd value list
+#define x_immd_1             (1 << 16)
+#define x_immd_2             (2 << 16)
+#define x_immd_3             (3 << 16)
+#define x_immd_4             (4 << 16)
+#define x_immd_5             (5 << 16)
+#define x_immd_6             (6 << 16)
+#define x_immd_7             (7 << 16)
+#define x_immd_8             (9 << 16)
+#define x_immd_16            (10 << 16)
+#define x_immd_24            (11 << 16)
+#define x_immd_32            (12 << 16)
+#define x_immd_40            (13 << 16)
+#define x_immd_48            (14 << 16)
+#define x_immd_56            (15 << 16)
+
+///2-bit rs1 register list (rs1: Source register)
+#define x_rs1_a0            (0 << 16)
+#define x_rs1_a1            (1 << 16)
+#define x_rs1_a2            (2 << 16)
+#define x_rs1_a3            (3 << 16)
+
+///2-bit rs2 register list (rs2: Source register)
+#define x_rs2_a0            (0 << 18)
+#define x_rs2_a1            (1 << 18)
+#define x_rs2_a2            (2 << 18)
+#define x_rs2_a3            (3 << 18)
+
+///3-bit rm register list (rm: register for memory opration)
+#define x_rm_a0             (0 << 20)
+#define x_rm_a1             (1 << 20)
+#define x_rm_a2             (2 << 20)
+#define x_rm_a3             (3 << 20)
+#define x_rm_s0             (4 << 20)
+#define x_rm_s2             (5 << 20)
+#define x_rm_a4             (6 << 20)
+#define x_rm_a6             (7 << 20)
+
+///2-bit rp register list (rp: memory optation pointer)
+#define x_rp_t0             (0 << 23)
+#define x_rp_t1             (1 << 23)
+#define x_rp_t2             (2 << 23)
+#define x_rp_t3             (3 << 23)
+
+
+/***********************************************************************************************
+*                   3-bit rp-mode + ri register list
+* rp-mode: pointer increase mode, ri: pointer increase value
+*                   0           1           2           3
+* rp-mode=1      keep rp        t4          t5          t6          register
+* rp-mode=0         1           2           -2          -1          immediate (操作单位为单元)
+************************************************************************************************/
+#define x_ri_kp             (4 << 25)
+#define x_ri_t4             (5 << 25)
+#define x_ri_t5             (6 << 25)
+#define x_ri_t6             (7 << 25)
+#define x_ri_i1             (0 << 25)
+#define x_ri_i2             (1 << 25)
+#define x_ri_in2            (2 << 25)
+#define x_ri_in1            (3 << 25)
+
+///Memory function list
+#define x_funcm_lw          (15 << 28)
+#define x_funcm_lhu         (8 << 28)
+#define x_funcm_lhs         (9 << 28)
+#define x_funcm_lhh         (10 << 28)
+#define x_funcm_lbu         (12 << 28)
+#define x_funcm_lbs         (13 << 28)
+#define x_funcm_lbh         (14 << 28)
+#define x_funcm_sw          (1 << 28)
+#define x_funcm_sh          (2 << 28)
+#define x_funcm_shh         (3 << 28)
+#define x_funcm_sb          (4 << 28)
+#define x_funcm_sbh         (5 << 28)
+
+///Memory function
+#define m_lw(rm, rp, ri)    (x_funcm_lw  | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_lhu(rm, rp, ri)   (x_funcm_lhu | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_lhs(rm, rp, ri)   (x_funcm_lhs | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_lhh(rm, rp, ri)   (x_funcm_lhh | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_lbu(rm, rp, ri)   (x_funcm_lbu | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_lbs(rm, rp, ri)   (x_funcm_lbs | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_lbh(rm, rp, ri)   (x_funcm_lbh | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_sw(rm, rp, ri)    (x_funcm_sw  | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_sh(rm, rp, ri)    (x_funcm_sh  | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_shh(rm, rp, ri)   (x_funcm_shh | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_sb(rm, rp, ri)    (x_funcm_sb  | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+#define m_sbh(rm, rp, ri)   (x_funcm_sbh | x_ri_##ri | x_rp_##rp | x_rm_##rm)
+
+///Memory function instruction
+#define x_lw(rm, rp, ri)    .long (x_funcm_lw  | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_lhu(rm, rp, ri)   .long (x_funcm_lhu | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_lhs(rm, rp, ri)   .long (x_funcm_lhs | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_lhh(rm, rp, ri)   .long (x_funcm_lhh | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_lbu(rm, rp, ri)   .long (x_funcm_lbu | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_lbs(rm, rp, ri)   .long (x_funcm_lbs | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_lbh(rm, rp, ri)   .long (x_funcm_lbh | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_sw(rm, rp, ri)    .long (x_funcm_sw  | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_sh(rm, rp, ri)    .long (x_funcm_sh  | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_shh(rm, rp, ri)   .long (x_funcm_shh | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_sb(rm, rp, ri)    .long (x_funcm_sb  | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+#define x_sbh(rm, rp, ri)   .long (x_funcm_sbh | x_ri_##ri | x_rp_##rp | x_rm_##rm | x_opcode)
+
+///ALU function instruction
+#define x_addu(rd, rs)      .long (x_rs_##rs | x_rd_##rd | (0x08 << 7) | x_opcode)
+#define x_adds(rd, rs)      .long (x_rs_##rs | x_rd_##rd | (0x48 << 7) | x_opcode)
+#define x_addlu(rd, rs)     .long (x_rs_##rs | x_rd_##rd | (0x0a << 7) | x_opcode)
+#define x_addls(rd, rs)     .long (x_rs_##rs | x_rd_##rd | (0x4a << 7) | x_opcode)
+#define x_addru(rd, rs)     .long (x_rs_##rs | x_rd_##rd | (0x09 << 7) | x_opcode)
+#define x_addrs(rd, rs)     .long (x_rs_##rs | x_rd_##rd | (0x49 << 7) | x_opcode)
+#define x_subu(rd, rs)      .long (x_rs_##rs | x_rd_##rd | (0x0c << 7) | x_opcode)
+#define x_subs(rd, rs)      .long (x_rs_##rs | x_rd_##rd | (0x4c << 7) | x_opcode)
+#define x_sublu(rd, rs)     .long (x_rs_##rs | x_rd_##rd | (0x0e << 7) | x_opcode)
+#define x_subls(rd, rs)     .long (x_rs_##rs | x_rd_##rd | (0x4e << 7) | x_opcode)
+#define x_subru(rd, rs)     .long (x_rs_##rs | x_rd_##rd | (0x0d << 7) | x_opcode)
+#define x_subrs(rd, rs)     .long (x_rs_##rs | x_rd_##rd | (0x4d << 7) | x_opcode)
+
+#define x_mulu(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x20 << 7) | x_opcode)
+#define x_muls(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x60 << 7) | x_opcode)
+#define x_mulus(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x22 << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+#define x_macu(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x28 << 7) | x_opcode)
+#define x_macs(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x68 << 7) | x_opcode)
+#define x_macus(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x2a << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+#define x_msbu(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x2c << 7) | x_opcode)
+#define x_msbs(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x6c << 7) | x_opcode)
+#define x_msbus(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x2e << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+
+#define x_mulu_shift16(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x34 << 7) | x_opcode)
+#define x_muls_shift16(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x55 << 7) | x_opcode)
+#define x_muls_shift15(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x74 << 7) | x_opcode)
+#define x_mulus_shift16(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x36 << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+#define x_macu_shift16(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x38 << 7) | x_opcode)
+#define x_macs_shift16(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x59 << 7) | x_opcode)
+#define x_macs_shift15(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x78 << 7) | x_opcode)
+#define x_macus_shift16(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x6a << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+#define x_msbu_shift16(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x3c << 7) | x_opcode)
+#define x_msbs_shift16(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x5d << 7) | x_opcode)
+#define x_msbs_shift15(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x7c << 7) | x_opcode)
+#define x_msbus_shift16(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x3e << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+
+#define x_mulu_shift24(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x54 << 7) | x_opcode)
+#define x_muls_shift24(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x77 << 7) | x_opcode)
+#define x_muls_shift23(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x76 << 7) | x_opcode)
+#define x_mulus_shift24(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x56 << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+#define x_macu_shift24(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x58 << 7) | x_opcode)
+#define x_macs_shift24(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x7b << 7) | x_opcode)
+#define x_macs_shift23(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x7a << 7) | x_opcode)
+#define x_macus_shift24(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x5a << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+#define x_msbu_shift24(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x5c << 7) | x_opcode)
+#define x_msbs_shift24(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x7f << 7) | x_opcode)
+#define x_msbs_shift23(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x7e << 7) | x_opcode)
+#define x_msbus_shift24(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x5e << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+
+#define x_mulu_shift32(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x35 << 7) | x_opcode)
+#define x_muls_shift32(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x57 << 7) | x_opcode)
+#define x_muls_shift31(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x75 << 7) | x_opcode)
+#define x_mulus_shift32(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x37 << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+#define x_macu_shift32(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x39 << 7) | x_opcode)
+#define x_macs_shift32(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x5b << 7) | x_opcode)
+#define x_macs_shift31(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x79 << 7) | x_opcode)
+#define x_macus_shift32(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x3b << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+#define x_msbu_shift32(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x3d << 7) | x_opcode)
+#define x_msbs_shift32(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x5f << 7) | x_opcode)
+#define x_msbs_shift31(rd, rs1, rs2)      .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x7d << 7) | x_opcode)
+#define x_msbus_shift32(rd, rs1, rs2)     .long (x_rs2_##rs2 | x_rs1_##rs1 | x_rd_##rd | (0x3f << 7) | x_opcode)     //rs1(unsigned), rs2(signed)
+
+#define x_lshift64(rd, rs)      .long (x_rs_##rs   | x_rd_##rd | (0x11 << 7) | x_opcode)
+#define x_lshift64i(rd, immd)   .long (x_immd_##immd | x_rd_##rd | (0x10 << 7) | x_opcode)
+#define x_rshift64(rd, rs)      .long (x_rs_##rs   | x_rd_##rd | (0x15 << 7) | x_opcode)
+#define x_rshift64i(rd, immd)   .long (x_immd_##immd | x_rd_##rd | (0x14 << 7) | x_opcode)
+#define x_ashift64(rd, rs)      .long (x_rs_##rs   | x_rd_##rd | (0x17 << 7) | x_opcode)
+#define x_ashift64i(rd, immd)   .long (x_immd_##immd | x_rd_##rd | (0x16 << 7) | x_opcode)
+
+#define x_clip64u(rd, rs)       .long (x_rs_##rs   | x_rd_##rd | (0x05 << 7) | x_opcode)
+#define x_clip64s(rd, rs)       .long (x_rs_##rs   | x_rd_##rd | (0x45 << 7) | x_opcode)
+#define x_clip64ui(rd, immd)    .long (x_immd_##immd | x_rd_##rd | (0x04 << 7) | x_opcode)
+#define x_clip64si(rd, immd)    .long (x_immd_##immd | x_rd_##rd | (0x44 << 7) | x_opcode)
+#define x_round64(rd, rs)       .long (x_rs_##rs   | x_rd_##rd | (0x47 << 7) | x_opcode)
+#define x_round64i(rd, immd)    .long (x_immd_##immd | x_rd_##rd | (0x46 << 7) | x_opcode)
+
+#define x_clr64(rd)             .long (x_rd_##rd | (0x0b << 7) | x_opcode)                      //rd_val = 0
+#define x_uext64(rd, rs)        .long (x_rs_##rs   | x_rd_##rd | (0x12 << 7) | x_opcode)        //rd_val = rs_val 无符号扩展
+#define x_sext64(rd, rs)        .long (x_rs_##rs   | x_rd_##rd | (0x13 << 7) | x_opcode)        //rd_val = rs_val 有符号扩展
+
+#endif

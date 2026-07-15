@@ -1,0 +1,28 @@
+# ===== 构建产物 =====
+smart_mini/Output/obj/
+smart_mini/Output/bin/
+*.o
+*.rv32
+*.bin
+*.dcf
+*.map
+*.lst
+*.xm
+
+# ===== CodeBlocks 临时 =====
+smart_mini/app.layout
+smart_mini/obj/
+smart_mini/bin/
+*.depend
+
+# ===== 操作系统 =====
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
