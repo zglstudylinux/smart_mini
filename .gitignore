@@ -1,0 +1,33 @@
+# 编译产物
+*.dcf
+*.xm
+*.lst
+*.map
+*.hex
+*.bin
+*.elf
+
+# Output 目录下的编译中间文件
+smart_mini/Output/bin/*.dcf
+smart_mini/Output/bin/*.xm
+smart_mini/Output/bin/*.lst
+smart_mini/Output/bin/map.txt
+smart_mini/Output/bin/download.xm
+
+# Code::Blocks
+*.layout
+*.depend
+*.cbp
+obj/
+bin/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
