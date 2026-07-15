@@ -21,7 +21,8 @@ void uart_test(void);
 void uart2_send_test(void);
 void uart2_recv_test(void);
 void soft_uart_test(void);
-void spi_test(void);
+void soft_spi_test(void);
+void soft_i2c_test(void);
 void i2c_test(void);
 
 #endif // _TEST_H_

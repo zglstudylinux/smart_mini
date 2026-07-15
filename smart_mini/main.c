@@ -190,11 +190,11 @@ int main(void)
     PICCON |= 0x10003;                                  //LOW PRIO interrupt enable
 
     // ================================================================
-    // Phase 3.5: 软件 GPIO 模拟串口测试
+    // Phase 4: 软件 SPI 测试 (SPI1 硬件模块)
     // ================================================================
     printf("Hello SMART Flash MiniProj\n");
-    printf("Starting Software UART Test...\n");
-    soft_uart_test();
+    printf("Starting Soft SPI Test...\n");
+    soft_spi_test();
 
     while (1);
     return 0;
