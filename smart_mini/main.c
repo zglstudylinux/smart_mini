@@ -190,11 +190,11 @@ int main(void)
     PICCON |= 0x10003;                                  //LOW PRIO interrupt enable
 
     // ================================================================
-    // Phase 1: GPIO 测试
+    // Phase 2: Timer PWM 测试
     // ================================================================
     printf("Hello SMART Flash MiniProj\n");
-    printf("Starting GPIO Test...\n");
-    gpio_test();
+    printf("Starting Timer PWM Test...\n");
+    timer_pwm_test();
 
     while (1);
     return 0;
