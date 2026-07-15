@@ -190,21 +190,11 @@ int main(void)
     PICCON |= 0x10003;                                  //LOW PRIO interrupt enable
 
     // ================================================================
-    // Phase 3: UART2 测试 (三选一)
+    // Phase 3.5: 软件 GPIO 模拟串口测试
     // ================================================================
     printf("Hello SMART Flash MiniProj\n");
-
-    // 测试1: 回环 (跳线 PB2↔PB1)
-//    printf("Starting UART2 Loopback Test...\n");
-//    uart_test();
-
-    // 测试2: 发送 (PB2→USB-TTL→PC, 串口助手 115200)
-//     printf("Starting UART2 Send Test...\n");
-//     uart2_send_test();
-
-    // 测试3: 接收 (PC→USB-TTL→PB1, 收到的数据 printf 打印)
-     printf("Starting UART2 Recv Test...\n");
-     uart2_recv_test();
+    printf("Starting Software UART Test...\n");
+    soft_uart_test();
 
     while (1);
     return 0;
