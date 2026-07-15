@@ -41,6 +41,11 @@
 		<Unit filename="header/sfr.h" />
 		<Unit filename="header/sys.h" />
 		<Unit filename="header/typedef.h" />
+		<Unit filename="test/test_common.h" />
+		<Unit filename="test/test_gpio.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_gpio.h" />
 		<Unit filename="interrupt.c">
 			<Option compilerVar="CC" />
 		</Unit>
