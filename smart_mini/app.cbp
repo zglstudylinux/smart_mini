@@ -46,6 +46,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_gpio.h" />
+		<Unit filename="test/test_timer.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_timer.h" />
 		<Unit filename="interrupt.c">
 			<Option compilerVar="CC" />
 		</Unit>

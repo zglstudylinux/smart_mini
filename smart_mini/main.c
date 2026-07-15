@@ -1,5 +1,6 @@
 #include "include.h"
 #include "test/test_gpio.h"
+#include "test/test_timer.h"
 
 #define UART_BAUD           1500000
 #define UART_BAUD_VAL       (((24000000 + (UART_BAUD / 2)) / UART_BAUD) - 1)
@@ -9,11 +10,12 @@ extern u32 __comm_vma, __comm_lma, __comm_size;
 
 // 各外设测试入口（每个测试一个 ifdef 守卫，便于裁剪）
 extern void test_gpio_run(void);
+extern void test_timer_run(void);
 
 // ===== 测试启用开关（一次只开一个） =====
-// 当前正在测试：GPIO
-#define TEST_GPIO_EN    1
-// #define TEST_TIMER_EN   1
+// 当前正在测试：Timer
+// #define TEST_GPIO_EN    1
+#define TEST_TIMER_EN   1
 // #define TEST_UART_EN    1
 // #define TEST_SPI_EN     1
 // #define TEST_I2C_EN     1
@@ -223,10 +225,10 @@ int main(void)
 #ifdef TEST_GPIO_EN
     test_gpio_run();
 #endif
+#ifdef TEST_TIMER_EN
+    test_timer_run();
+#endif
 // 后续测试入口（实现后取消注释）
-// #ifdef TEST_TIMER_EN
-//     test_timer_run();
-// #endif
 // #ifdef TEST_UART_EN
 //     test_uart_run();
 // #endif
