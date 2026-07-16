@@ -42,7 +42,7 @@ static u8 soft_spi_byte_c(u8 tx)
 static u8 soft_spi_byte_asm(u8 tx)
 {
     u8 rx = 0;
-    u32 out, in;
+    u32 in;
 
     for (int i = 7; i >= 0; i--) {
         // 设 MOSI

@@ -190,10 +190,10 @@ int main(void)
     PICCON |= 0x10003;                                  //LOW PRIO interrupt enable
 
     // ================================================================
-    // 软件 SPI 汇编优化对比
+    // SPI1 中断 + DMA中断 测试
     // ================================================================
     printf("Hello SMART Flash MiniProj\n");
-    asm_spi_test();
+    spi_int_test();
 
     while (1);
     return 0;
