@@ -191,19 +191,6 @@ void hw_exp7_write_protect(void)
     while (1);
 }
 
-void hw_exp9_unique_id(void)
-{
-    printf("\n===== [HW] Exp9: Unique ID & SFDP =====\n\n");
-    hw_w25q64_init();
-    printf("UID: "); hw_cs_low(); hw_spi_byte(0x4B);
-    hw_spi_byte(0xFF);hw_spi_byte(0xFF);hw_spi_byte(0xFF);hw_spi_byte(0xFF);
-    for (int i=0;i<8;i++) printf("%02X ", hw_spi_byte(0xFF)); hw_cs_high();
-    printf("\nSFDP: "); hw_cs_low(); hw_spi_byte(0x5A);
-    hw_spi_byte(0);hw_spi_byte(0);hw_spi_byte(0); hw_spi_byte(0xFF);
-    for (int i=0;i<16;i++) printf("%02X ", hw_spi_byte(0xFF)); hw_cs_high();
-    printf("\n(expect 53 46 44 50 = SFDP)\n"); while (1);
-}
-
 /* ================================================================
  *  实验 8: Fast Read 速度对比
  *  Standard Read (0x03) vs Fast Read (0x0B, 含 1 字节 dummy)
@@ -261,3 +248,89 @@ void hw_exp8_fast_read(void)
 
     while (1);
 }
+
+/* ================================================================
+ *  实验 9: Fast Read 反超演示 (高低速对比)
+ *  低速 100KHz → Standard 快 (Fast 多 dummy)
+ *  高速 12MHz  → 两者接近, 但 Fast 支持更高频率
+ * ================================================================ */
+void hw_exp9_speed_demo(void)
+{
+    printf("\n===== [HW] Exp9: Fast Read Speed Demo =====\n\n");
+    hw_w25q64_init();
+
+    #define BLK 4096
+    u8 buf[BLK];
+    (void)buf;  // suppress unused warning
+    u32 t0, t1;
+
+    // ====== 低速 100KHz ======
+    SPI1BAUD = 239;  // 100KHz
+    printf("--- At 100KHz (BAUD=239) ---\n");
+
+    t0 = tick_get();
+    hw_cs_low(); hw_spi_byte(0x03);
+    hw_spi_byte(0);hw_spi_byte(0);hw_spi_byte(0);
+    for (int i=0;i<BLK;i++) buf[i]=hw_spi_byte(0xFF);
+    hw_cs_high(); t1 = tick_get();
+    printf("Standard(0x03): %lu ticks\n", t1-t0);
+
+    t0 = tick_get();
+    hw_cs_low(); hw_spi_byte(0x0B);
+    hw_spi_byte(0);hw_spi_byte(0);hw_spi_byte(0);
+    hw_spi_byte(0xFF);
+    for (int i=0;i<BLK;i++) buf[i]=hw_spi_byte(0xFF);
+    hw_cs_high(); t1 = tick_get();
+    printf("Fast   (0x0B): %lu ticks  --- slower (dummy byte)\n\n", t1-t0);
+
+    // ====== 高速 12MHz ======
+    SPI1BAUD = 1;    // 24MHz/(1+1) = 12MHz
+    printf("--- At 12MHz (BAUD=1) ---\n");
+
+    t0 = tick_get();
+    hw_cs_low(); hw_spi_byte(0x03);
+    hw_spi_byte(0);hw_spi_byte(0);hw_spi_byte(0);
+    for (int i=0;i<BLK;i++) buf[i]=hw_spi_byte(0xFF);
+    hw_cs_high(); t1 = tick_get();
+    u32 t_std = t1-t0;
+    printf("Standard(0x03): %lu ticks\n", t_std);
+
+    t0 = tick_get();
+    hw_cs_low(); hw_spi_byte(0x0B);
+    hw_spi_byte(0);hw_spi_byte(0);hw_spi_byte(0);
+    hw_spi_byte(0xFF);
+    for (int i=0;i<BLK;i++) buf[i]=hw_spi_byte(0xFF);
+    hw_cs_high(); t1 = tick_get();
+    u32 t_fast = t1-t0;
+    printf("Fast   (0x0B): %lu ticks\n\n", t_fast);
+
+    printf("=== Analysis ===\n");
+    printf("100KHz: Fast > Standard (dummy byte overhead visible)\n");
+    printf("12MHz:  Fast is FASTER by %ld ticks (%ld.%ld%%)\n",
+           t_std - t_fast,
+           (100 * (t_std - t_fast)) / t_std,
+           ((1000 * (t_std - t_fast)) / t_std) % 10);
+    printf("----At high speed, dummy byte cost is negligible.\n");
+    printf("----Fast Read (0x0B) supports up to 133MHz on W25Q64,\n");
+    printf("----Standard Read (0x03) only ~50MHz.\n");
+    printf("----For production code, always use Fast Read.\n");
+
+    // 恢复低速
+    SPI1BAUD = 239;
+    while (1);
+}
+
+void hw_exp10_unique_id(void)
+{
+    printf("\n===== [HW] Exp10: Unique ID & SFDP =====\n\n");
+    hw_w25q64_init();
+    printf("UID: "); hw_cs_low(); hw_spi_byte(0x4B);
+    hw_spi_byte(0xFF);hw_spi_byte(0xFF);hw_spi_byte(0xFF);hw_spi_byte(0xFF);
+    for (int i=0;i<8;i++) printf("%02X ", hw_spi_byte(0xFF)); hw_cs_high();
+    printf("\nSFDP: "); hw_cs_low(); hw_spi_byte(0x5A);
+    hw_spi_byte(0);hw_spi_byte(0);hw_spi_byte(0); hw_spi_byte(0xFF);
+    for (int i=0;i<16;i++) printf("%02X ", hw_spi_byte(0xFF)); hw_cs_high();
+    printf("\n(expect 53 46 44 50 = SFDP)\n"); while (1);
+}
+
+

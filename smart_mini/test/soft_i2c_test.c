@@ -74,7 +74,7 @@ static u8 i2c_write_byte(u8 data) {
 }
 
 /* 接收一字节, ack=0 发送ACK, ack=1 发送NAK */
-static u8 i2c_read_byte(u8 ack) {
+static u8 __attribute__((unused)) i2c_read_byte(u8 ack) {
     u8 data = 0;
     sda_in();                           // 释放 SDA
     for (int i = 7; i >= 0; i--) {

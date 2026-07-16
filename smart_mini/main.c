@@ -194,15 +194,17 @@ int main(void)
     // ================================================================
     printf("Hello SMART Flash MiniProj\n");
 
-//     hw_exp1_jedec_id();      // Exp1: 读 JEDEC ID
-//    hw_exp2_status();           // Exp2: 读 Status Register (非破坏)
-//     hw_exp3_page_rw();       // Exp3: 页写入与读取 (会擦除Sector0!)
-//     hw_exp4_cross_page();    // Exp4: 跨页连续写入
-//     hw_exp5_sector_erase();  // Exp5: 扇区擦除与验证
-//     hw_exp6_erase_timing();  // Exp6: 擦除耗时 (含整片擦除~20s!)
-//     hw_exp7_write_protect(); // Exp7: 写保护配置
-     hw_exp8_fast_read();     // Exp8: Fast Read 速度对比
-//     hw_exp9_unique_id();     // Exp9: Unique ID + SFDP
+//  hw_exp1_jedec_id();      // Exp1: 读 JEDEC ID
+//  hw_exp2_status();        // Exp2: 读 Status Register (非破坏)
+//  hw_exp3_page_rw();       // Exp3: 页写入与读取 (会擦除Sector0!)
+//  hw_exp4_cross_page();    // Exp4: 跨页连续写入
+//  hw_exp5_sector_erase();  // Exp5: 扇区擦除与验证
+//  hw_exp6_erase_timing();  // Exp6: 擦除耗时 (含整片擦除~20s!)
+//  hw_exp7_write_protect(); // Exp7: 写保护配置
+//    hw_exp8_fast_read();     // Exp8: Fast Read 速度对比
+    //hw_exp9_speed_demo();    // Exp9: Fast Read 高低速反超演示
+
+  hw_exp10_unique_id();    // Exp10: Unique ID + SFDP
 
     while (1);
     return 0;
