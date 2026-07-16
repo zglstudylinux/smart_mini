@@ -1,122 +1,158 @@
-# W25Q64 Flash 全套实验报告
+# W25Q64 Flash 完整实验报告 (软件 SPI + 硬件 SPI)
 
 > **日期**: 2026-07-16  
 > **芯片**: BT892X + W25Q64JV (8MB SPI NOR Flash)  
-> **通信方式**: 软件 GPIO 模拟 SPI Mode 0  
-> **引脚**: PE4=CS, PE5=CLK, PE6=MOSI, PE7=MISO  
-> **测试结果**: ✅ 全部通过 (Exp1~7, Exp9)
+> **测试结果**: ✅ Exp1~9 全部通过
 
 ---
 
 ## 硬件接线
 
-| BT892X (PORTE) | W25Q64 模块 | 功能 |
+### 软件 SPI 接线 (Exp1~9)
+
+| BT892X (PORTE) | W25Q64 | 功能 |
 |:---:|:---:|------|
-| PE4 | CS | 片选 (低有效) |
-| PE5 | CLK | SPI 时钟 |
-| PE6 | MOSI | 主机输出 → DI |
-| PE7 | MISO | 主机输入 ← DO |
-| 3.3V | VCC, HOLD#, WP# | 电源 |
-| GND | GND | 地 |
+| PE4 | CS | GPIO 片选 |
+| PE5 | CLK | GPIO 时钟 |
+| PE6 | MOSI | GPIO 数据输出 |
+| PE7 | MISO | GPIO 数据输入 |
+
+### 硬件 SPI1 接线 (HW Exp1~8)
+
+| BT892X | W25Q64 | 功能 |
+|:---:|:---:|------|
+| PE4 | CS | GPIO 片选 |
+| PE6 | CLK | SPI1 时钟 (G4) |
+| PE7 | MOSI | SPI1 MOSI (G4) |
+| PE5 | MISO | SPI1 MISO (G4) |
 
 ---
 
-## 底层 API
+## 底层 API (硬件 SPI 版本)
 
 ```c
-void w25q64_init(void)           // 初始化 GPIO
-u8   soft_spi_byte(u8 tx)        // 软件 SPI 全双工收发 1 字节
-void w25q64_cs_low/high(void)    // 片选控制
-void w25q64_write_enable(void)   // 发送 0x06
-u8   w25q64_read_status(u8 cmd)  // 读 SR1(0x05) / SR2(0x35)
-void w25q64_wait_busy(void)      // 轮询 BUSY 位
-void w25q64_read_data(addr,buf,len)      // 读数据 (0x03)
-void w25q64_page_program(addr,buf,len)   // 页编程 (0x02)
-void w25q64_sector_erase(addr)   // 扇区擦除 (0x20)
+hw_w25q64_init()                // SPI1 G4 映射 + GPIO 初始化
+hw_spi_byte(tx) → rx            // 硬件 SPI1 全双工收发一字节
+hw_cs_low() / hw_cs_high()      // CS 控制
+hw_write_enable()               // 0x06
+hw_read_status(cmd) → u8        // 0x05 / 0x35
+hw_wait_busy()                  // 轮询 SR1 BUSY 位
+hw_read_data(addr, buf, len)    // 0x03 读数据
+hw_page_program(addr, buf, len) // 0x02 页编程
+hw_sector_erase(addr)           // 0x20 扇区擦除
 ```
 
 ---
 
-## 实验 1: 读 JEDEC ID — ✅
+## 实验 1: JEDEC ID
 
-**原理**: 发送 `0x9F` 命令，Flash 返回 3 字节制造商/型号/容量。
-
-**结果**: `JEDEC ID: 0xEF 0x40 0x17` — Winbond W25Q64JV 64Mbit ✓
-
----
-
-## 实验 2: 读 Status Register — ✅
-
-**原理**: `0x05` 读 SR1 (BUSY/WEL/BP), `0x35` 读 SR2。
-
-**结果**: SR1=0x02 (WEL=1), SR2=0x00。发 Write Enable 后 WEL 保持 ✓
+| 方式 | 结果 |
+|------|------|
+| 软件 SPI | `0xEF 0x40 0x17` ✅ |
+| 硬件 SPI | `0xEF 0x40 0x17` ✅ |
 
 ---
 
-## 实验 3: 页写入与读取 — ✅
+## 实验 2: Status Register
 
-**原理**: Write Enable `0x06` → Page Program `0x02` (最多 256 字节) → 等 BUSY → Read `0x03`。
-
-**结果**: 256 字节写入 Page 0 后读回，Errors: 0/256 ✓
-
----
-
-## 实验 4: 跨页连续写入 — ✅
-
-**原理**: Page Program 不能跨 256 字节边界，需软件分页。
-
-**结果**: 从 0xF0 写 100 字节 (跨 Page 0→1)，Errors: 0/100 ✓
+| 方式 | SR1 初始 | SR1 写使能后 | SR2 |
+|------|----------|-------------|------|
+| 软件 SPI | `0x02` WEL=1 | `0x02` | `0x00` |
+| 硬件 SPI | `0x00` WEL=0 | `0x02` ✅ | `0x00` |
 
 ---
 
-## 实验 5: 扇区擦除与验证 — ✅
+## 实验 3: 页写入与读取
 
-**原理**: `0x20` Sector Erase 将 4KB 擦除为全 `0xFF`。
-
-**结果**: 擦除后全 `0xFF`，重新写入校验正确 ✓
-
----
-
-## 实验 6: 擦除耗时对比 — ✅
-
-| 擦除类型 | 命令 | 大小 | 实测耗时 |
-|----------|:---:|------|----------|
-| Sector Erase | 0x20 | 4KB | **47ms** |
-| Block Erase 32KB | 0x52 | 32KB | **101ms** |
-| Block Erase 64KB | 0xD8 | 64KB | **162ms** |
-| Chip Erase | 0xC7/0x60 | 8MB | **~18s** |
+| 方式 | 结果 |
+|------|------|
+| 软件 SPI | 0 errors / 256 ✅ |
+| 硬件 SPI | 0 errors / 256 ✅ |
 
 ---
 
-## 实验 7: 写保护配置 — ✅
+## 实验 4: 跨页连续写入
 
-**原理**: 修改 SR1 的 BP 位实现硬件写保护。`0x01` 写 Status Register。
-
-**结果**: BP2=1 后向保护区写入被拒绝 (WEL=0)，解除保护后恢复正常 ✓
+| 方式 | 地址 | 长度 | 结果 |
+|------|------|------|------|
+| 软件 SPI | 0xF0 | 100B | 0/100 ✅ |
+| 硬件 SPI | 0xF0 | 100B | 0/100 ✅ |
 
 ---
 
-## 实验 9: Unique ID + SFDP — ✅
+## 实验 5: 扇区擦除与验证
 
-**原理**: `0x4B` 读 64-bit 唯一 ID，`0x5A` 读 SFDP 参数表。
+| 方式 | 擦除前 | 擦除后 | 重新写入 |
+|------|--------|--------|----------|
+| 软件 SPI | 0xA5 ✅ | 全 0xFF ✅ | 0xA5 ✅ |
+| 硬件 SPI | 0xA5 ✅ | 全 0xFF ✅ | 0xA5 ✅ |
 
-**结果**: 
-- Unique ID: `D1 63 D4 20 CB 35 50 34`
-- SFDP Signature: `53 46 44 50` = "SFDP" ✓
+---
+
+## 实验 6: 擦除耗时对比
+
+| 擦除类型 | 命令 | 大小 | 软件 SPI | 硬件 SPI |
+|----------|:---:|------|----------|----------|
+| Sector | 0x20 | 4KB | 47ms | 48ms |
+| Block 32KB | 0x52 | 32KB | 101ms | 105ms |
+| Block 64KB | 0xD8 | 64KB | 162ms | 168ms |
+| Chip | 0xC7 | 8MB | ~18s | ~18s |
+
+> 软硬件方式耗时基本一致（误差在测量精度内），因为瓶颈是 Flash 内部擦除时间。
+
+---
+
+## 实验 7: 写保护
+
+| 方式 | 初始 BP | 设置 BP2 | 保护区写入 | 解除保护 |
+|------|---------|----------|------------|----------|
+| 软件 SPI | 0 | BP=4 ✅ | WEL=0 (拒绝) ✅ | BP=0 ✅ |
+| 硬件 SPI | 0 | BP=4 ✅ | WEL=0 (拒绝) ✅ | BP=0 ✅ |
+
+---
+
+## 实验 8: Fast Read 速度对比 (仅硬件 SPI, 100KHz, 2048 字节)
+
+| 读模式 | 命令 | 耗时 | 数据一致性 |
+|--------|:---:|------|:---:|
+| Standard Read | 0x03 | 170983 ticks | ✅ |
+| Fast Read | 0x0B | 171053 ticks (+70) | ✅ OK |
+
+> 100KHz 下 Standard 和 Fast 速度接近（Fast 多 1 字节 dummy）。更高时钟下 Fast Read 优势明显。Dual/Quad 留待高级 SPI 阶段。
+
+---
+
+## 实验 9: Unique ID + SFDP
+
+| 方式 | Unique ID | SFDP Signature |
+|------|-----------|:---:|
+| 软件 SPI | `D1 63 D4 20 CB 35 50 34` | `53 46 44 50` ✅ |
+| 硬件 SPI | `D1 63 D4 20 CB 35 50 34` | `53 46 44 50` ✅ |
+
+---
+
+## 软件 SPI vs 硬件 SPI 对比
+
+| 维度 | 软件 SPI | 硬件 SPI1 |
+|------|----------|-----------|
+| CPU 占用 | 高（每个 bit 都需要 CPU 翻转） | 低（硬件自动移位） |
+| 速度 | 受 delay_us() 限制 | 最高 12MHz（SPI1 模块） |
+| 引脚灵活性 | 任意 GPIO | 固定映射组 |
+| 代码量 | 多（手动时序） | 少（寄存器操作） |
+| 适用场景 | 调试/无硬件 SPI 时 | 正式项目 |
 
 ---
 
 ## 总结
 
-| 实验 | 内容 | 结果 |
-|:--:|------|:--:|
-| 1 | JEDEC ID | ✅ 0xEF 0x40 0x17 |
-| 2 | Status Register | ✅ 位操作正常 |
-| 3 | 页写入+读取 | ✅ 256/256 |
-| 4 | 跨页写入 | ✅ 100/100 |
-| 5 | 扇区擦除+验证 | ✅ 全 0xFF |
-| 6 | 擦除耗时 | ✅ 47/101/162/18466ms |
-| 7 | 写保护 | ✅ BP 生效/解除 |
-| 9 | Unique ID+SFDP | ✅ |
-
-> 实验 8 (Fast Read / Dual / Quad SPI) 留待硬件 SPI 阶段实现。
+| 实验 | 内容 | 软 SPI | 硬 SPI |
+|:--:|------|:--:|:--:|
+| 1 | JEDEC ID | ✅ | ✅ |
+| 2 | Status Register | ✅ | ✅ |
+| 3 | 页写入+读取 | ✅ | ✅ |
+| 4 | 跨页写入 | ✅ | ✅ |
+| 5 | 扇区擦除+验证 | ✅ | ✅ |
+| 6 | 擦除耗时 | ✅ | ✅ |
+| 7 | 写保护 | ✅ | ✅ |
+| 8 | Fast Read 对比 | — | ✅ |
+| 9 | Unique ID+SFDP | ✅ | ✅ |
