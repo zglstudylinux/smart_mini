@@ -34,6 +34,7 @@ void hw_exp7_write_protect(void);
 void hw_exp8_fast_read(void);
 void hw_exp9_speed_demo(void);
 void hw_exp10_unique_id(void);
+void asm_spi_test(void);
 void w25q64_exp1_jedec_id(void);
 void w25q64_exp2_status(void);
 void w25q64_exp3_page_rw(void);
