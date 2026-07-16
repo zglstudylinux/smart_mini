@@ -50,6 +50,14 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_timer.h" />
+		<Unit filename="test/test_uart.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_uart.h" />
+		<Unit filename="test/test_i2c.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c.h" />
 		<Unit filename="interrupt.c">
 			<Option compilerVar="CC" />
 		</Unit>

@@ -1,6 +1,8 @@
 #include "include.h"
 #include "test/test_gpio.h"
 #include "test/test_timer.h"
+#include "test/test_uart.h"
+#include "test/test_i2c.h"
 
 #define UART_BAUD           1500000
 #define UART_BAUD_VAL       (((24000000 + (UART_BAUD / 2)) / UART_BAUD) - 1)
@@ -11,14 +13,16 @@ extern u32 __comm_vma, __comm_lma, __comm_size;
 // 各外设测试入口（每个测试一个 ifdef 守卫，便于裁剪）
 extern void test_gpio_run(void);
 extern void test_timer_run(void);
+extern void test_uart_run(void);
+extern void test_i2c_run(void);
 
 // ===== 测试启用开关（一次只开一个） =====
-// 当前正在测试：Timer
+// 当前正在测试：I2C (PE6 SCL + PE7 SDA, AT24C02 @ 0x50)
 // #define TEST_GPIO_EN    1
-#define TEST_TIMER_EN   1
+// #define TEST_TIMER_EN   1
 // #define TEST_UART_EN    1
 // #define TEST_SPI_EN     1
-// #define TEST_I2C_EN     1
+#define TEST_I2C_EN     1
 
 AT(.com_rodata.exception)
 const char str_cpu_error[] = "ERR: %x, EPC: %x\n";
@@ -228,16 +232,15 @@ int main(void)
 #ifdef TEST_TIMER_EN
     test_timer_run();
 #endif
-// 后续测试入口（实现后取消注释）
-// #ifdef TEST_UART_EN
-//     test_uart_run();
-// #endif
+#ifdef TEST_UART_EN
+    test_uart_run();
+#endif
 // #ifdef TEST_SPI_EN
 //     test_spi_run();
 // #endif
-// #ifdef TEST_I2C_EN
-//     test_i2c_run();
-// #endif
+#ifdef TEST_I2C_EN
+    test_i2c_run();
+#endif
 
     while (1);
     return 0;
