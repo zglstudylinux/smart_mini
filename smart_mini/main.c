@@ -190,11 +190,11 @@ int main(void)
     PICCON |= 0x10003;                                  //LOW PRIO interrupt enable
 
     // ================================================================
-    // Phase 4: 软件 SPI 测试 (SPI1 硬件模块)
+    // Phase 4.5: 软件 I2C 测试 (Bit-Bang)
     // ================================================================
     printf("Hello SMART Flash MiniProj\n");
-    printf("Starting Soft SPI Test...\n");
-    soft_spi_test();
+    printf("Starting Software I2C Test...\n");
+    soft_i2c_test();
 
     while (1);
     return 0;
