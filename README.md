@@ -13,11 +13,11 @@ minimax/
 │   ├── TWS  DEV V2.2.pdf
 │   ├── bt892x_usermanual.pdf
 │   ├── plan.md                        # 整体学习计划
-│   ├── test_gpio.md                   # GPIO 测试报告
-│   ├── test_timer.md                  # Timer 测试报告
-│   ├── test_uart.md                   # UART 测试报告
-│   ├── test_spi.md                    # SPI 测试报告
-│   └── test_i2c.md                    # I2C 测试报告
+│   ├── test_gpio.md                   # GPIO 测试报告 ✅
+│   ├── test_timer.md                  # Timer 测试报告 ✅
+│   ├── test_uart.md                   # UART 测试报告 ❌ 跳过（PA 引脚不可用）
+│   ├── test_spi.md                    # SPI 测试报告 ❌ 跳过（引脚冲突）
+│   └── test_i2c.md                    # I2C 测试报告 ✅
 └── smart_mini/            # CodeBlocks 工程根
     ├── app.cbp           # CodeBlocks 工程文件
     ├── main.c            # 主入口
@@ -59,13 +59,17 @@ xmaker → app.xm → app.dcf (可烧录固件)
 
 | 模块 | 文件 | 引脚 | 状态 |
 |---|---|---|---|
-| GPIO | `test/test_gpio.c` | PE4 | ⬜ 待测试 |
-| Timer | `test/test_timer.c` | TMR1（内部） | ⬜ 待测试 |
-| UART1 | `test/test_uart.c` | PA3(TX) / PA4(RX) | ⬜ 待测试 |
-| SPI | `test/test_spi.c` | PE5/PE6/PF0/PF1 (bit-bang) | ⬜ 待测试 |
-| I2C | `test/test_i2c.c` | PE6/PE7 (bit-bang) | ⬜ 待测试 |
+| GPIO | `test/test_gpio.c` | PE4 | ✅ 通过 (commit a01473b) |
+| Timer | `test/test_timer.c` | TMR1（内部） | ✅ 通过 (commit 5a658e3) |
+| UART1 | `test/test_uart.c` | PA3/PA4 或 PA6/PA7 | ❌ 跳过 — **PA0-PA7 全部 GPIO 不翻转**（物理问题） |
+| SPI | `test/test_spi.c` | 未实现 | ❌ 跳过 — 仅剩可用引脚与 USB / SPI-Flash 冲突 |
+| I2C | `test/test_i2c.c` | PE6(SCL) / PE7(SDA)（硬件 IIC） | ✅ 通过 (commit c1b1c60) |
 
 详细计划见 [docs/plan.md](docs/plan.md)。
+
+**跳过说明**：UART1 和 SPI 因引脚受限无法测试。PA 端口 0-7 全部 GPIO 输出无信号（用户实测），导致 UART1 唯一可用引脚（PA3/PA4 或 PA6/PA7）失效。SPI0 仅剩的可用 Group（G1=PG 端口=SPI-Flash，G3=PB3/PB4=USB）都有致命冲突。其他可选的 UART/SPI 资源（如 SPI1、UART2）需要进一步诊断。
+
+测试顺序：GPIO → Timer → I2C（中间跳过 UART1 和 SPI）。
 
 ## 关键约束
 
