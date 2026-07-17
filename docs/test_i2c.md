@@ -338,11 +338,25 @@ GPIOEPD   &= ~PE6_7_MASK;   // 关闭下拉
 
 **IIC 控制器启动瞬态**：芯片 IIC_EN 打开后第一次 KS 触发容易 NAK（实测发现的实际行为），第二次稳定。这可能是 IIC 控制器状态机需要"热身"，或者是时钟门控开启到 KS 的某个延迟。解决方法：probe_addr 内部自动重试一次（max 2 次）。
 
-**两种 IIC 时钟源都功能性工作**：
-- `CLKCON1[23]=0` → RC2M（2 MHz）：SCL ≈ 100 kHz（与手册公式一致）
-- `CLKCON1[23]=1` → x24m_div_clk 路径：SCL 实际 ≈ 0.8 kHz（远低于按 CLKCOCN2 推算的 923 kHz），说明该路径可能还需要其他 clock gate（CLKGAT1[21]、CLKGAT1[29]）配合
+**两种 IIC 时钟源都功能性工作**（基于 test_i2c_x24m.c 诊断测试）：
+- **关键发现**：`CLKGAT1[29] = 1` 是 x24m_div_clk 路径得到 24M 时钟的必要条件
+- 默认状态 `CLKGAT1[29] = 0` 导致 x24m_div_clk 没有 24M 时钟输入，fallback 到慢速源（约 1 kHz SCL）
+- **完整工作配置**（test_i2c_x24m.c Test F 验证，10/10 ACK，~92 kHz）：
+  - `CLKGAT1 |= BIT(21) | BIT(29)` （打开 24M→Div gate）
+  - `CLKCON2[31:24] = 11` （让 Div 输出正好 2 MHz）
+  - `CLKCON1[23] = 0 或 1` 择一
+- **未确认**：CLKCOCN1[23] 的 MUX 方向（0=RC2M 还是 0=x24m_div_clk），需逻辑分析仪确认。
 
-**对工程的意义**：两种源都能 ACK AT24C02 验证通信功能正常，但在高波特率场景必须用 RC2M。如果需要低功耗 I2C（很慢的 SCL），x24m_div_clk 路径可用，但要确认实际频率。
+**对工程的意义**：
+- 高波特率 I2C 必须设置 `CLKGAT1[29]=1` + `CLKCOCN2[31:24]=11`（2 MHz 档），否则 IIC 会以超低速运行（看起来"工作"但实际比额定慢 100 倍）
+- 推荐默认配置：上电时设 `CLKGAT1[29]=1` 以保证 IIC 时钟就绪
+- 完整 I2C 时钟初始化序列（推荐）：
+  1. `CLKGAT2 |= BIT(0)` （开 IIC 总时钟门）
+  2. `CLKGAT1 |= BIT(21) | BIT(29)` （开 24M→Div 通路）
+  3. `CLKCON2 |= 11 << 24` （设 Div 输出 2 MHz）
+  4. `FUNCMCON2 |= 0x5 << 24` （选 G5 引脚）
+  5. GPIO PE6/PE7 配置（数字 IO + 上拉 + FEN）
+  6. `IICCON0 = (19<<4) | IIC_EN` （POSDIV=19，使能）
 
 ---
 

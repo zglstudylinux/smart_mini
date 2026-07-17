@@ -58,6 +58,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_i2c.h" />
+		<Unit filename="test/test_i2c_x24m.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_x24m.h" />
 		<Unit filename="interrupt.c">
 			<Option compilerVar="CC" />
 		</Unit>
