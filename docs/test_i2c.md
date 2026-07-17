@@ -338,49 +338,46 @@ GPIOEPD   &= ~PE6_7_MASK;   // 关闭下拉
 
 **IIC 控制器启动瞬态**：芯片 IIC_EN 打开后第一次 KS 触发容易 NAK（实测发现的实际行为），第二次稳定。这可能是 IIC 控制器状态机需要"热身"，或者是时钟门控开启到 KS 的某个延迟。解决方法：probe_addr 内部自动重试一次（max 2 次）。
 
-**两种 IIC 时钟源实测验证**（test_i2c_x24m.c 诊断 + test_i2c_la.c 逻辑分析仪确认）：
+**两种 IIC 时钟源实测验证**（test_i2c_x24m.c / test_i2c_la.c / test_i2c_pe_min.c 综合确认）：
 
-**核心发现**：`CLKGAT1[29] = 1` 是 IIC 正常工作的**关键 gate**！
-
-- 默认 `CLKGAT1[29] = 0` 时，x24m_div_clk 没有 24M 时钟输入，IIC fallback 到慢速源（SCL ~1 kHz，但 ACK 仍成功）
-- 设置 `CLKGAT1[29] = 1` 后，IIC 获得正确 24M 时钟输入
-
-**逻辑分析仪实测确认**（test_i2c_la.c，不需要 AT24C02）：
-| 测试 | CLKCON1[23] | 实测 SCL 周期 | 实测 IIC 时钟 |
-|---|---|---|---|
-| Test 1 | 0 | **10.0 µs** | 2 MHz |
-| Test 2 | 1 | **10.0 µs** | 2 MHz |
-- 两个 MUX 选择都得到 2 MHz，可能 `rc2m_clk` 和 `x24m_div_clk` 两条路径的标称频率都是 2 MHz（无法仅用频率区分 MUX 方向）
-- ⚠️ 实际工程中**无需关心 MUX 选择**，两条路径都能工作
-
-**完整 IIC 时钟初始化序列**（推荐固化）：
+**最终结论（自我修正）**：之前关于"CLKGAT1[29]=1 是必需的"判断是**错的**。这是测试设计缺陷导致的假象，可能是 IIC 状态机被某些早期测试污染。**真正工作所需的极简配置**是：
 
 ```c
-// 1. 开 IIC 总时钟门
-CLKGAT2  |= BIT(0);
-
-// 2. **关键**：开 24M→Div 通路
-CLKGAT1  |= BIT(21) | BIT(29);
-
-// 3. Div 输出 24/(11+1) = 2 MHz
-CLKCON2  |= 11u << 24;
-
-// 4. G5 映射 (PE6 SCL, PE7 SDA)
-FUNCMCON2 |= 0x5u << 24;
-
-// 5. PE6/PE7 PAD (10K 上拉 + FEN + 数字 IO)
-GPIOEDE  |= PE6_7_MASK;
-GPIOEFEN |= PE6_7_MASK;
-GPIOEPU  |= PE6_7_MASK;
-
-// 6. POSDIV=19, 使能 IIC, 期望 SCL=100 kHz
-IICCON0 = (19u << 4) | IIC_EN;
+CLKGAT2  |= BIT(0);                   // 必须
+FUNCMCON2 |= (group_num << 24);       // 0x3=G3(PB1/PB2), 0x5=G5(PE6/PE7)
+CLKCON1  |= BIT(23);                  // 必须（选快速路径）
+// + PE6/PE7（或 PB1/PB2）的 PAD 配置（数字 IO + FEN + 上拉）
+IICCON0  = (19u << 4) | IIC_EN;       // POSDIV=19
 ```
 
-**对工程的意义**：
-- 项目代码默认应该把 `CLKGAT1 |= BIT(29)` 加入 main.c 初始化，保证 IIC 不会以 fallback 慢速运行
-- 即使按 100 kHz 配置，IIC 也能稳定 ACK AT24C02（write-read pattern 全通过）
-- 通过逻辑分析仪验证，CLKGAT1[29]=1 后两条 MUX 路径都给 2 MHz，工程上无需区分
+**实测证据（test_i2c_pe_min.c，2026-07-16）**：
+
+| 测试 | clkcon1[23] | CLKGAT1[29]=1 | CLKCOCN2 | 实测 SCL | ACK |
+|---|---|---|---|---|---|
+| A | 0 (path A) | ❌ | ❌ | ~0 kHz（极慢）| 9/20 |
+| **B** | **1 (path B)** | **❌** | **❌** | **~126 kHz ✅** | **10/20** |
+| C | 1 | ✅ | ❌ | 126 kHz（**和 B 完全一样**）| 10/20 |
+| D | 1 | ✅ | ✅=11 | 58 kHz（**变慢！**）| 10/20 |
+| E | 0 | ✅ | ✅=11 | ~0 kHz | 10/20 |
+
+**关键结论**：
+1. **CLKGAT1[29]=1 完全不需要**——Test B 不设也能 126 kHz；Test C 加设后频率一模一样
+2. **CLKCOCN2=11 反而让 IIC 变慢**——说明它在该路径下不是有用的"加速"配置
+3. **PE6/PE7 和 PB1/PB2 完全对称**——都用极简配置即可工作
+4. **clkcon1[23]=1 是必须选的快速路径**；bit 23=0 是慢速路径（约 32 kHz ring osc）
+
+**实际 IICK 值**：
+- Test B 实测 SCL=126 kHz × (POSDIV+1)=20 → IICK ≈ **2.5 MHz**
+- 不是 3 MHz (x24m_clkdiv8)，不是 1 MHz (x26m_div_clk)
+- 来源推测：BT892X 内部某个固定的 ÷N Div 输出 2.5 MHz（具体路径需进一步查芯片手册）
+
+---
+
+**对工程的意义**（修正后）：
+- ✅ 极简配置：`CLKGAT2 |= BIT(0)` + `FUNCMCON2 = group<<24` + `CLKCON1 |= BIT(23)` + `IICCON0 = (POSDIV<<4)|IIC_EN` + PAD 配置
+- ✅ 这对 **PE6/PE7 (G5)** 和 **PB1/PB2 (G3)** 都适用，无需任何额外配置
+- ❌ **不要使用**：`CLKGAT1 |= BIT(29)`、`CLKCON2[31:24] = 11`（虽然能用但会让 IIC 变慢）
+- 对工程意义：用户在嵌入式 SDK 中看到的"完整 IIC 初始化代码"可能是过度设计，极简就够用
 
 ---
 

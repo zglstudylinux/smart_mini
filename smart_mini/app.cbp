@@ -70,6 +70,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_i2c_pb.h" />
+		<Unit filename="test/test_i2c_pe_min.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_pe_min.h" />
 		<Unit filename="interrupt.c">
 			<Option compilerVar="CC" />
 		</Unit>
