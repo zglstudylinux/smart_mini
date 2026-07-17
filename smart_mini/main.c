@@ -3,10 +3,7 @@
 #include "test/test_timer.h"
 #include "test/test_uart.h"
 #include "test/test_i2c.h"
-#include "test/test_i2c_x24m.h"
 #include "test/test_i2c_la.h"
-#include "test/test_i2c_pb.h"
-#include "test/test_i2c_pe_min.h"
 
 #define UART_BAUD           1500000
 #define UART_BAUD_VAL       (((24000000 + (UART_BAUD / 2)) / UART_BAUD) - 1)
@@ -14,27 +11,21 @@
 extern u32 __bss_start, __bss_size, __aram_start;
 extern u32 __comm_vma, __comm_lma, __comm_size;
 
-// 各外设测试入口（每个测试一个 ifdef 守卫，便于裁剪）
+// Test entry declarations (each guarded by its own ifdef)
 extern void test_gpio_run(void);
 extern void test_timer_run(void);
 extern void test_uart_run(void);
 extern void test_i2c_run(void);
-extern void test_i2c_x24m_run(void);
 extern void test_i2c_la_run(void);
-extern void test_i2c_pb_run(void);
-extern void test_i2c_pe_min_run(void);
 
-// ===== 测试启用开关（一次只开一个） =====
-// 当前正在测试：PE6/PE7 极简配置 (验证 x24m_clkdiv8 默认 3 MHz)
+// ===== Test enable switches (enable ONE at a time) =====
+// Default: hardware I2C + AT24C02 functional test
+// Switch to TEST_I2C_LA_EN for logic analyzer timing test
+#define TEST_I2C_EN    1
 // #define TEST_GPIO_EN    1
 // #define TEST_TIMER_EN   1
 // #define TEST_UART_EN    1
-// #define TEST_SPI_EN     1
-// #define TEST_I2C_EN     1
-// #define TEST_I2C_X24M_EN  1
 // #define TEST_I2C_LA_EN   1
-// #define TEST_I2C_PB_EN   1
-#define TEST_I2C_PE_MIN_EN  1
 
 AT(.com_rodata.exception)
 const char str_cpu_error[] = "ERR: %x, EPC: %x\n";
@@ -56,7 +47,7 @@ void uart_putchar(char ch)
     UART0DATA = ch;
 }
 
-//timer2用于delay函数
+//timer2 for delay function
 void timer2_init(void)
 {
     TMR2CON = 0;                                            //select tmr_inc rising edge
@@ -107,11 +98,11 @@ void delay_5ms(uint n)
 void sd_disable(void)
 {
     SD0CON = 0;
-    CLKGAT0 &= ~BIT(9);                     //关SD0 CLKGATE
-    FUNCMCON0 = 0x0f;                       //关SD0 Mapping
+    CLKGAT0 &= ~BIT(9);                     //close SD0 CLKGATE
+    FUNCMCON0 = 0x0f;                       //close SD0 Mapping
 }
 
-//关闭USB模块
+//Disable USB module
 void usb_disable(void)
 {
     USBCON0 = BIT(5);                       //USB Disable
@@ -119,38 +110,24 @@ void usb_disable(void)
     USBCON2 = 0;
     USBCON3 = 0;
 
-    CLKGAT0 &= ~BIT(14);                    //关USB CLKGAT
+    CLKGAT0 &= ~BIT(14);                    //close USB CLKGAT
 }
 
 void uart0_mapping_sel(void)
 {
-    //关闭UART0默认PA7打印
+    //close UART0 default PA7 print
     GPIOAPU  &= ~BIT(7);
     GPIOAFEN &= ~BIT(7);                            //Port Function EN
     GPIOADIR |= BIT(7);
     GPIOADE  &= ~BIT(7);
     FUNCMCON0 = (0xf << 12) | (0xf << 8);           //clear uart0 mapping
 
-    //USB PB3打印
+    //USB PB3 print
     GPIOBDE  |= BIT(3);
     GPIOBPU  |= BIT(3);
     GPIOBDIR |= BIT(3);
     GPIOBFEN |= BIT(3);
     FUNCMCON0 = (7 << 12) | (3 << 8);               //RX0 Map To TX0, TX0 Map to G3
-
-    //SD G2 Mapping PB2打印
-//    GPIOBDE  |= BIT(2);
-//    GPIOBPU  |= BIT(2);
-//    GPIOBDIR |= BIT(2);
-//    GPIOBFEN |= BIT(2);
-//    FUNCMCON0 = (7 << 12) | (2 << 8);               //RX0 Map To TX0, TX0 Map to G2
-
-//    //SD G1 Mapping PA7打印
-//    GPIOADE  |= BIT(7);
-//    GPIOAPU  |= BIT(7);
-//    GPIOADIR |= BIT(7);
-//    GPIOAFEN |= BIT(7);
-//    FUNCMCON0 = (7 << 12) | (1 << 8);               //RX0 Map To TX0, TX0 Map to G1
 }
 
 void set_sys_clk(u32 sys_clk)
@@ -171,7 +148,7 @@ void set_sys_clk(u32 sys_clk)
     }
 
     cpu_ie = PICCON & BIT(0);
-    PICCONCLR = BIT(0);                             //关中断，切换系统时钟
+    PICCONCLR = BIT(0);                             //disable IRQ, switch system clock
 
     if(UART0CON & BIT(0)) {
         while (!(UART0CON & BIT(8)));
@@ -199,10 +176,10 @@ int main(void)
     usb_disable();
     sd_disable();
     LVDCON &= ~BIT(30);
-    FUNCMCON0 = 0xff000000;                             //关闭不用的UART1, UART2 mapping
+    FUNCMCON0 = 0xff000000;                             //close unused UART1, UART2 mapping
     FUNCMCON1 = 0xffffffff;
     CLKCON2 &= 0x00ffffff;
-    CLKCON2 |= (25 << 24);                              //配置x26m_div_clk = 1M (timer, ir, fmam ...用到)
+    CLKCON2 |= (25 << 24);                              //configure x26m_div_clk = 1M (timer, ir, fmam use)
     CLKCON0 &= ~(7 << 23);
     CLKCON0 |= BIT(24);                                 //tmr_inc select x26m_div_clk = 1M
     timer2_init();
@@ -218,7 +195,7 @@ int main(void)
     PICADR = (u32)&__comm_vma;
     PICCON |= 0x10003;                                  //LOW PRIO interrupt enable
 
-    //以下是测试代码
+    //Below is test code
     printf("Hello SMART Flash MiniProj\n");
 
     printf("test %%d %%i -123: %d %i\n", -123, -123);
@@ -236,8 +213,8 @@ int main(void)
     printf("test %%c RT: %c%c\n", 'R', 'T');
     printf("test %%s: %s\n", "Success");
 
-    // ===== 外设测试入口（每个测试一个宏，便于裁剪） =====
-    // 编译时通过 -DTEST_GPIO_EN=1 启用，默认关闭避免改动默认行为
+    // ===== Peripheral test entry (each guarded by its own ifdef, easy to trim) =====
+    // Enable with -DTEST_xxx_EN=1 at compile time, default off to avoid changing default behavior
 #ifdef TEST_GPIO_EN
     test_gpio_run();
 #endif
@@ -253,17 +230,8 @@ int main(void)
 #ifdef TEST_I2C_EN
     test_i2c_run();
 #endif
-#ifdef TEST_I2C_X24M_EN
-    test_i2c_x24m_run();
-#endif
 #ifdef TEST_I2C_LA_EN
     test_i2c_la_run();
-#endif
-#ifdef TEST_I2C_PB_EN
-    test_i2c_pb_run();
-#endif
-#ifdef TEST_I2C_PE_MIN_EN
-    test_i2c_pe_min_run();
 #endif
 
     while (1);

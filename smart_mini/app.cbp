@@ -58,22 +58,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_i2c.h" />
-		<Unit filename="test/test_i2c_x24m.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="test/test_i2c_x24m.h" />
 		<Unit filename="test/test_i2c_la.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_i2c_la.h" />
-		<Unit filename="test/test_i2c_pb.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="test/test_i2c_pb.h" />
-		<Unit filename="test/test_i2c_pe_min.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="test/test_i2c_pe_min.h" />
 		<Unit filename="interrupt.c">
 			<Option compilerVar="CC" />
 		</Unit>
