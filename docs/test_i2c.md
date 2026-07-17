@@ -338,25 +338,49 @@ GPIOEPD   &= ~PE6_7_MASK;   // 关闭下拉
 
 **IIC 控制器启动瞬态**：芯片 IIC_EN 打开后第一次 KS 触发容易 NAK（实测发现的实际行为），第二次稳定。这可能是 IIC 控制器状态机需要"热身"，或者是时钟门控开启到 KS 的某个延迟。解决方法：probe_addr 内部自动重试一次（max 2 次）。
 
-**两种 IIC 时钟源都功能性工作**（基于 test_i2c_x24m.c 诊断测试）：
-- **关键发现**：`CLKGAT1[29] = 1` 是 x24m_div_clk 路径得到 24M 时钟的必要条件
-- 默认状态 `CLKGAT1[29] = 0` 导致 x24m_div_clk 没有 24M 时钟输入，fallback 到慢速源（约 1 kHz SCL）
-- **完整工作配置**（test_i2c_x24m.c Test F 验证，10/10 ACK，~92 kHz）：
-  - `CLKGAT1 |= BIT(21) | BIT(29)` （打开 24M→Div gate）
-  - `CLKCON2[31:24] = 11` （让 Div 输出正好 2 MHz）
-  - `CLKCON1[23] = 0 或 1` 择一
-- **未确认**：CLKCOCN1[23] 的 MUX 方向（0=RC2M 还是 0=x24m_div_clk），需逻辑分析仪确认。
+**两种 IIC 时钟源实测验证**（test_i2c_x24m.c 诊断 + test_i2c_la.c 逻辑分析仪确认）：
+
+**核心发现**：`CLKGAT1[29] = 1` 是 IIC 正常工作的**关键 gate**！
+
+- 默认 `CLKGAT1[29] = 0` 时，x24m_div_clk 没有 24M 时钟输入，IIC fallback 到慢速源（SCL ~1 kHz，但 ACK 仍成功）
+- 设置 `CLKGAT1[29] = 1` 后，IIC 获得正确 24M 时钟输入
+
+**逻辑分析仪实测确认**（test_i2c_la.c，不需要 AT24C02）：
+| 测试 | CLKCON1[23] | 实测 SCL 周期 | 实测 IIC 时钟 |
+|---|---|---|---|
+| Test 1 | 0 | **10.0 µs** | 2 MHz |
+| Test 2 | 1 | **10.0 µs** | 2 MHz |
+- 两个 MUX 选择都得到 2 MHz，可能 `rc2m_clk` 和 `x24m_div_clk` 两条路径的标称频率都是 2 MHz（无法仅用频率区分 MUX 方向）
+- ⚠️ 实际工程中**无需关心 MUX 选择**，两条路径都能工作
+
+**完整 IIC 时钟初始化序列**（推荐固化）：
+
+```c
+// 1. 开 IIC 总时钟门
+CLKGAT2  |= BIT(0);
+
+// 2. **关键**：开 24M→Div 通路
+CLKGAT1  |= BIT(21) | BIT(29);
+
+// 3. Div 输出 24/(11+1) = 2 MHz
+CLKCON2  |= 11u << 24;
+
+// 4. G5 映射 (PE6 SCL, PE7 SDA)
+FUNCMCON2 |= 0x5u << 24;
+
+// 5. PE6/PE7 PAD (10K 上拉 + FEN + 数字 IO)
+GPIOEDE  |= PE6_7_MASK;
+GPIOEFEN |= PE6_7_MASK;
+GPIOEPU  |= PE6_7_MASK;
+
+// 6. POSDIV=19, 使能 IIC, 期望 SCL=100 kHz
+IICCON0 = (19u << 4) | IIC_EN;
+```
 
 **对工程的意义**：
-- 高波特率 I2C 必须设置 `CLKGAT1[29]=1` + `CLKCOCN2[31:24]=11`（2 MHz 档），否则 IIC 会以超低速运行（看起来"工作"但实际比额定慢 100 倍）
-- 推荐默认配置：上电时设 `CLKGAT1[29]=1` 以保证 IIC 时钟就绪
-- 完整 I2C 时钟初始化序列（推荐）：
-  1. `CLKGAT2 |= BIT(0)` （开 IIC 总时钟门）
-  2. `CLKGAT1 |= BIT(21) | BIT(29)` （开 24M→Div 通路）
-  3. `CLKCON2 |= 11 << 24` （设 Div 输出 2 MHz）
-  4. `FUNCMCON2 |= 0x5 << 24` （选 G5 引脚）
-  5. GPIO PE6/PE7 配置（数字 IO + 上拉 + FEN）
-  6. `IICCON0 = (19<<4) | IIC_EN` （POSDIV=19，使能）
+- 项目代码默认应该把 `CLKGAT1 |= BIT(29)` 加入 main.c 初始化，保证 IIC 不会以 fallback 慢速运行
+- 即使按 100 kHz 配置，IIC 也能稳定 ACK AT24C02（write-read pattern 全通过）
+- 通过逻辑分析仪验证，CLKGAT1[29]=1 后两条 MUX 路径都给 2 MHz，工程上无需区分
 
 ---
 

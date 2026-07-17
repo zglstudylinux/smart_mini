@@ -4,6 +4,7 @@
 #include "test/test_uart.h"
 #include "test/test_i2c.h"
 #include "test/test_i2c_x24m.h"
+#include "test/test_i2c_la.h"
 
 #define UART_BAUD           1500000
 #define UART_BAUD_VAL       (((24000000 + (UART_BAUD / 2)) / UART_BAUD) - 1)
@@ -17,15 +18,17 @@ extern void test_timer_run(void);
 extern void test_uart_run(void);
 extern void test_i2c_run(void);
 extern void test_i2c_x24m_run(void);
+extern void test_i2c_la_run(void);
 
 // ===== 测试启用开关（一次只开一个） =====
-// 当前正在测试：x24m_div_clk 诊断
+// 当前正在测试：LA 测 SCL（需断开 AT24C02）
 // #define TEST_GPIO_EN    1
 // #define TEST_TIMER_EN   1
 // #define TEST_UART_EN    1
 // #define TEST_SPI_EN     1
 // #define TEST_I2C_EN     1
-#define TEST_I2C_X24M_EN  1
+// #define TEST_I2C_X24M_EN  1
+#define TEST_I2C_LA_EN   1
 
 AT(.com_rodata.exception)
 const char str_cpu_error[] = "ERR: %x, EPC: %x\n";
@@ -246,6 +249,9 @@ int main(void)
 #endif
 #ifdef TEST_I2C_X24M_EN
     test_i2c_x24m_run();
+#endif
+#ifdef TEST_I2C_LA_EN
+    test_i2c_la_run();
 #endif
 
     while (1);
