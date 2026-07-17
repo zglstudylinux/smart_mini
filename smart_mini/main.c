@@ -1,6 +1,7 @@
 #include "include.h"
 #include "test/test_gpio.h"
 #include "test/test_timer.h"
+#include "test/test_timer_pwm.h"
 #include "test/test_uart.h"
 #include "test/test_i2c.h"
 #include "test/test_i2c_la.h"
@@ -16,6 +17,7 @@ extern u32 __comm_vma, __comm_lma, __comm_size;
 // Test entry declarations (each guarded by its own ifdef)
 extern void test_gpio_run(void);
 extern void test_timer_run(void);
+extern void test_timer_pwm_run(void);
 extern void test_uart_run(void);
 extern void test_i2c_run(void);
 extern void test_i2c_la_run(void);
@@ -25,8 +27,9 @@ extern void test_i2c_gpio_la_run(void);
 // ===== Test enable switches (enable ONE at a time) =====
 // Default: hardware I2C + AT24C02 functional test
 // Comment out the default and uncomment one of the others to switch
- #define TEST_GPIO_EN    1
-// #define TEST_TIMER_EN   1
+// #define TEST_GPIO_EN    1
+ #define TEST_TIMER_EN   1
+// #define TEST_TIMER_PWM_EN  1   // TMR3 三路 PWM (PB0/PB1/PB2)；注意与 UART2 共用 PB1/PB2，不能与 TEST_UART_EN 同开
 // #define TEST_UART_EN    1
 // #define TEST_I2C_EN    1
 // #define TEST_I2C_LA_EN   1
@@ -204,20 +207,20 @@ int main(void)
     //Below is test code
     printf("Hello SMART Flash MiniProj\n");
 
-    printf("test %%d %%i -123: %d %i\n", -123, -123);
-    printf("test %%u 456: %u\n", 456);
-    printf("test %%x %%X 0x12ab: %x %X\n", 0x12ab, 0x12ab);
-
-    printf("test %%ld %%li -12345678: %ld %li\n", -12345678, -12345678);
-    printf("test %%lu 4567890: %lu\n", 4567890);
-    printf("test %%lx %%lX 0xabcd6789: %lx %lX\n", 0xabcd6789, 0xabcd6789);
-
-    printf("test %%4d %%04i -12: %4d %04i\n", -12, -12);
-    printf("test %%-03lu 4567: %-03lu\n", 4567);
-    printf("test %%-8lx %%08lX 0xabcd: %-8lx %08lX\n", 0xabcd, 0xabcd);
-
-    printf("test %%c RT: %c%c\n", 'R', 'T');
-    printf("test %%s: %s\n", "Success");
+//    printf("test %%d %%i -123: %d %i\n", -123, -123);
+//    printf("test %%u 456: %u\n", 456);
+//    printf("test %%x %%X 0x12ab: %x %X\n", 0x12ab, 0x12ab);
+//
+//    printf("test %%ld %%li -12345678: %ld %li\n", -12345678, -12345678);
+//    printf("test %%lu 4567890: %lu\n", 4567890);
+//    printf("test %%lx %%lX 0xabcd6789: %lx %lX\n", 0xabcd6789, 0xabcd6789);
+//
+//    printf("test %%4d %%04i -12: %4d %04i\n", -12, -12);
+//    printf("test %%-03lu 4567: %-03lu\n", 4567);
+//    printf("test %%-8lx %%08lX 0xabcd: %-8lx %08lX\n", 0xabcd, 0xabcd);
+//
+//    printf("test %%c RT: %c%c\n", 'R', 'T');
+//    printf("test %%s: %s\n", "Success");
 
     // ===== Peripheral test entry (each guarded by its own ifdef, easy to trim) =====
     // Enable with -DTEST_xxx_EN=1 at compile time, default off to avoid changing default behavior
@@ -226,6 +229,9 @@ int main(void)
 #endif
 #ifdef TEST_TIMER_EN
     test_timer_run();
+#endif
+#ifdef TEST_TIMER_PWM_EN
+    test_timer_pwm_run();
 #endif
 #ifdef TEST_UART_EN
     test_uart_run();

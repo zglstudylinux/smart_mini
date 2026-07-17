@@ -50,6 +50,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_timer.h" />
+		<Unit filename="test/test_timer_pwm.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_timer_pwm.h" />
 		<Unit filename="test/test_uart.c">
 			<Option compilerVar="CC" />
 		</Unit>

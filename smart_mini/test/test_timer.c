@@ -100,6 +100,11 @@ void test_timer_run(void)
     register_isr(IRQ_TMR1_VECTOR, test_timer1_isr);
     g_t1_isr_count = 0;
 
+    // 【关键】清除 Part 1 轮询遗留的溢出挂起 TPND(bit9)
+    // 否则 TIE+PICEN 使能瞬间会立刻触发一次伪中断，使 1000 次计数提前约 1ms 完成
+    // 手册 §4.2：TPND 只能通过 TMR1CPND[9] TPCLR 写 1 清除（写 TMR1CON 不清）
+    TMR1CPND = BIT(9);
+
     // 配置 TMR1 为 1ms 周期中断
     TMR1CON = BIT(7);                  // TIE = 1（先开中断）
     TMR1CNT = 0;
