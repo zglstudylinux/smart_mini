@@ -62,6 +62,14 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_i2c_la.h" />
+		<Unit filename="test/test_i2c_gpio.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_gpio.h" />
+		<Unit filename="test/test_i2c_gpio_la.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_gpio_la.h" />
 		<Unit filename="interrupt.c">
 			<Option compilerVar="CC" />
 		</Unit>
