@@ -3,10 +3,10 @@
 // 手册：BT892X_UserManual_Driver.md §3.2 GPIO 寄存器说明
 // SFR：见 header/sfr.h 第 421-462 行（Group6 GPIO A/B/E/F）
 //
-// 测试列表（跳过不可用引脚）：
-//   - PE0（警告：MUTE PIN，高压相关）、PE4、PE5、PE6、PE7
-//   - PB0/PB1/PB2（注意：wakeup source，但本测试不进入 sleep，无影响）
-//   - 跳过：PB3（UART0 debug TX）、PB4（USB DM）、PB5（WKO 复位唤醒）
+// 测试列表（只测开发板上实际可达的引脚）：
+//   - PE4、PE5、PE6、PE7
+//   - PB1、PB2（注意：wakeup source，但本测试不进入 sleep，无影响）
+//   - 跳过：PE0（MUTE PIN 高压相关）、PB0、PB3（UART0 debug TX）、PB4（USB DM）、PB5（WKO 复位唤醒）
 //
 // 验证方法：逻辑分析仪夹探针到对应引脚，串口打印当前测试的引脚
 
@@ -44,17 +44,15 @@ void test_gpio_run(void)
 {
     TEST_LOG("========================================");
     TEST_LOG("PE/PB GPIO diagnostic test");
-    TEST_LOG("Connect logic analyzer probes to PE0/4/5/6/7 and PB0/1/2");
+    TEST_LOG("Connect logic analyzer probes to PE4/5/6/7 and PB1/2");
     TEST_LOG("Each pin will toggle 1Hz for 2 seconds");
     TEST_LOG("========================================");
 
     // ===== PE 端口 =====
     // PE1/PE2/PE3 不存在（手册 §4.3 只列出 PE0, PE4, PE5, PE6, PE7）
+    // PE0 为 MUTE PIN（高压相关），本测试跳过
     TEST_LOG("");
     TEST_LOG("*** PE port ***");
-
-    // PE0 - 警告：MUTE PIN (TYPE4 高压相关)
-    TEST_PIN_TOGGLE(E, 0, TOGGLE_PER_PIN_MS);
 
     // PE4
     TEST_PIN_TOGGLE(E, 4, TOGGLE_PER_PIN_MS);
@@ -69,12 +67,9 @@ void test_gpio_run(void)
     TEST_PIN_TOGGLE(E, 7, TOGGLE_PER_PIN_MS);
 
     // ===== PB 端口 =====
-    // 跳过 PB3 (debug TX) / PB4 (USBDM) / PB5 (WKO reset)
+    // 跳过 PB0 / PB3 (debug TX) / PB4 (USBDM) / PB5 (WKO reset)
     TEST_LOG("");
-    TEST_LOG("*** PB port (skipping PB3/PB4/PB5) ***");
-
-    // PB0 (WK1 wakeup source)
-    TEST_PIN_TOGGLE(B, 0, TOGGLE_PER_PIN_MS);
+    TEST_LOG("*** PB port (only PB1/PB2) ***");
 
     // PB1 (WK2 wakeup source)
     TEST_PIN_TOGGLE(B, 1, TOGGLE_PER_PIN_MS);

@@ -25,12 +25,12 @@ extern void test_i2c_gpio_la_run(void);
 // ===== Test enable switches (enable ONE at a time) =====
 // Default: hardware I2C + AT24C02 functional test
 // Comment out the default and uncomment one of the others to switch
-// #define TEST_GPIO_EN    1
+ #define TEST_GPIO_EN    1
 // #define TEST_TIMER_EN   1
 // #define TEST_UART_EN    1
 // #define TEST_I2C_EN    1
 // #define TEST_I2C_LA_EN   1
- #define TEST_I2C_GPIO_EN      1
+// #define TEST_I2C_GPIO_EN      1
 //#define TEST_I2C_GPIO_LA_EN   1
 
 AT(.com_rodata.exception)
