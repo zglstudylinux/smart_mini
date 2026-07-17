@@ -1,195 +1,211 @@
-// UART1 测试 — 寄存器级验证 PA6(RX) + PA7(TX) 双线通信
-// 手册：BT892X_UserManual_Driver.md §3.3 (FUNCMCON0 UART1 映射) + §6 (UART)
-// 引脚定义：docs/bt892x_pinfunction.md §4.1 (PA6=RX1-G1, PA7=TX1-G1)
-// SFR：见 header/sfr.h 第 88-92 行（UART1CON/CPND/BAUD/DATA）
-//
-// 引脚选择理由：
-//   - 原本计划用 PA3/PA4 (G2)，但 PA4 物理测试 GPIO 输出无信号（诊断失败）
-//   - 改用 PA6/PA7 (G1)：手册标注完全空闲，PA7 原本是 UART0 默认 TX
-//     但 main.c 已把 UART0 重映射到 PB3，所以 PA7 现在空闲
-//   - 不动 PB3 的 UART0 debug 打印
-//
-// 测试内容：
-//   1. TX-only：发送字符串，逻辑分析仪在 PA7 看波形
-//   2. Loopback：短接 PA6↔PA7，发送并比较接收数据
-//   3. Poll-RX：等待外部输入的字节（验证 RX 中断通路）
+/**
+ * @file    test_uart.c
+ * @brief   BT892X UART2 测试 (回环 / 发送 / 接收) —— 自 smart_mini_copilot 移植，功能不变
+ *
+ * 测试函数:
+ *   test_uart_run()        - 回环测试: 跳线 PB2<->PB1, 自发自收 256 字节（默认入口）
+ *   test_uart2_send_run()  - 发送测试: PB2(TX) → USB转TTL → PC串口助手
+ *   test_uart2_recv_run()  - 接收测试: PC串口助手 → USB转TTL → PB1(RX)
+ *
+ * 说明: 原 UART1(PA6/PA7 G1) 路径因该口在开发板上物理损坏，已整体换成 UART2(PB1/PB2 G2)。
+ * ⚠️ PB1/PB2 与 TMR3 PWM 冲突：TEST_UART_EN 不能与 TEST_TIMER_PWM_EN 同开。
+ *
+ * 参考手册: BT892X_UserManual_Driver.md §6 UART
+ * 引脚手册: bt892x_pinfunction.md §4.2 PORTB / §5.1 UART2
+ */
 
 #include "test_common.h"
 
-// ===== 波特率计算（24 MHz 系统时钟）=====
-// BAUD = Fsys / baud_rate - 1
-#define UART1_BAUD_115200   ((24000000 / 115200) - 1)   // = 207
-#define UART1_BAUD_9600     ((24000000 / 9600) - 1)     // = 2499
-
-// PA6 = BIT(6), PA7 = BIT(7)
-#define PA6_MASK    BIT(6)
-#define PA7_MASK    BIT(7)
-#define PA6_7_MASK  (PA6_MASK | PA7_MASK)
-
-// 初始化 UART1：配置 GPIO + 映射 + 波特率 + 使能
-// baud：目标波特率
-static void test_uart1_init(u32 baud_div)
+/* UART2 初始化 (115200, 8N1, PB2=TX, PB1=RX) */
+static void uart2_test_init(void)
 {
-    // 1. 先清除可能的残留映射（写 0xF 到 UT1TXMAP 和 UT1RXMAP 字段）
-    FUNCMCON0 = (FUNCMCON0 & 0x00ffffff) | (0xfu << 24) | (0xfu << 28);
+    // UART2 引脚映射: G2 (FUNCMCON1[7:4]=UT2TXMAP, [11:8]=UT2RXMAP)
+    FUNCMCON1 &= ~((0xF << 4) | (0xF << 8));
+    FUNCMCON1 |= (2 << 4) | (2 << 8);           // TX=PB2, RX=PB1 (G2)
 
-    // 2. PA6/PA7 PAD 配置
-    GPIOADE  |=  PA6_7_MASK;   // 数字 IO 使能
-    GPIOAFEN |=  PA6_7_MASK;   // 外设功能映射
-    GPIOAPU  |=  PA6_MASK;     // PA6 (RX) 上拉（避免悬空误触发）
-    GPIOADIR |=  PA6_MASK;     // PA6 = 输入（RX）
-    GPIOADIR &= ~PA7_MASK;     // PA7 = 输出（TX）
+    // PB2 → UART2 TX
+    GPIOBFEN |=  BIT(2);
+    GPIOBDE  |=  BIT(2);
+    GPIOBDIR &= ~BIT(2);
+    GPIOBPU  |=  BIT(2);
 
-    // 3. 映射 UART1 到 G1（PA6=RX, PA7=TX）
-    //    FUNCMCON0[27:24] = UT1TXMAP = 0x1 (G1)
-    //    FUNCMCON0[31:28] = UT1RXMAP = 0x1 (G1)
-    FUNCMCON0 = (FUNCMCON0 & 0x00ffffff) | (1u << 24) | (1u << 28);
+    // PB1 → UART2 RX
+    GPIOBFEN |=  BIT(1);
+    GPIOBDE  |=  BIT(1);
+    GPIOBDIR |=  BIT(1);
+    GPIOBPU  |=  BIT(1);
 
-    // 4. 设置波特率（高 16 位 = RX，低 16 位 = TX）
-    UART1BAUD = (baud_div << 16) | baud_div;
+    // 波特率 115200 (24MHz / 115200 - 1 = 207)
+    u32 baud_val = 207;
+    UART2BAUD = (baud_val << 16) | baud_val;
 
-    // 5. 使能 UART1 + 接收
-    //    BIT(0) = UTEN, BIT(7) = RXEN
-    UART1CON = BIT(7) | BIT(0);
+    // RXEN + UTEN
+    UART2CON = BIT(7) | BIT(0);
+    delay_ms(10);
 
-    // 6. 【谨慎】只清 RXPND，不清 TXPND！
-    //    原因：清 TXPND 会让 UART1CON BIT(8) 变成 0，
-    //    导致后续 test_uart1_tx_byte 的等待永远不返回
-    //    RXPND 在使能后应该是 0（无数据），但清除一下更稳妥
-    UART1CPND = BIT(9);    // 仅清 RXPND
-
-    // 7. 短暂等待稳定
-    delay_us(100);
-}
-
-// 发送 1 字节（轮询 TX 准备好）
-static void test_uart1_tx_byte(u8 ch)
-{
-    while (!(UART1CON & BIT(8)));   // 等待 TX ready（bit8 = TXPND 反向）
-    UART1CPND = BIT(8);             // 清 TX pending
-    UART1DATA = ch;
-}
-
-// 接收 1 字节（轮询，带超时）
-// timeout_us：超时（µs）
-// 返回：成功返回字节值，超时返回 0xFFFFFFFF
-static u32 test_uart1_rx_byte(u32 timeout_us)
-{
-    u32 t0 = TMR2CNT;
-    while (!(UART1CON & BIT(9))) {  // 等待 RX ready（bit9 = RXPND）
-        if ((u32)(TMR2CNT - t0) > timeout_us) {
-            return 0xFFFFFFFFul;  // 超时
-        }
+    // ★ 冲洗 RX: UART 使能后可能有毛刺/垃圾数据，丢弃掉
+    while (UART2CON & BIT(9)) {
+        (void)UART2DATA;
     }
-    UART1CPND = BIT(9);             // 清 RX pending
-    return (u32)(UART1DATA & 0xFF);
 }
 
+/* 发送一个字节 (阻塞，等发送完成才返回) */
+static void uart2_putc(u8 ch)
+{
+    while (!(UART2CON & BIT(8)));   // 等待 TX 空闲
+    UART2DATA = ch;                  // 写入数据，开始发送
+    while (!(UART2CON & BIT(8)));   // ★ 等待发送完成 (TXPND 重新变 1)
+}
+
+/* 接收一个字节 (阻塞) */
+static u8 uart2_getc(void)
+{
+    while (!(UART2CON & BIT(9)));   // 等待 RXPND=1 (接收到数据)
+    return (u8)UART2DATA;
+}
+
+// ================================================================
+//  测试 1: 回环测试 (跳线 PB2 ↔ PB1) —— 默认入口
+// ================================================================
 void test_uart_run(void)
 {
-    TEST_LOG("========================================");
-    TEST_LOG("UART1 test start (G1: PA6=RX, PA7=TX)");
-    TEST_LOG("========================================");
+    printf("\n===== BT892X UART2 Loopback Test =====\n\n");
 
-    // ===== Test 1: TX-only @ 115200 =====
-    TEST_LOG("[Test 1] TX-only @ 115200 baud");
-    TEST_LOG("  Connect logic analyzer to PA7 to see waveform");
-    test_uart1_init(UART1_BAUD_115200);
+    uart2_test_init();
 
-    {
-        const char *msg = "UART1 TX TEST\r\n";
-        while (*msg) {
-            test_uart1_tx_byte((u8)*msg++);
-        }
-        TEST_LOG("  TX sent: 'UART1 TX TEST' (14 bytes)");
-    }
+    printf("UART2: TX=PB2, RX=PB1, 115200bps 8N1\n");
+    printf("Jumper: PB2(TX) <-> PB1(RX)\n\n");
 
-    delay_ms(100);
+    int errors = 0, total = 0;
+    for (int val = 0; val <= 0xFF; val++) {
+        uart2_putc((u8)val);
 
-    // ===== Test 2: Loopback @ 115200 =====
-    TEST_LOG("[Test 2] Loopback test @ 115200 baud");
-    TEST_LOG("  Short PA6 <-> PA7 externally");
-    delay_ms(2000);    // 给用户 2 秒时间接杜邦线
-
-    test_uart1_init(UART1_BAUD_115200);
-
-    {
-        const char *tx_msg = "Hello UART1";
-        const u32 tx_len = 11;
-        u8 rx_buf[16] = {0};
-        u32 err_cnt = 0;
-
-        TEST_LOG("  Sending 'Hello UART1' (11 bytes)...");
-
-        // 发送
-        for (u32 i = 0; i < tx_len; i++) {
-            test_uart1_tx_byte((u8)tx_msg[i]);
+        u32 timeout = 0xFFFFF;
+        while (!(UART2CON & BIT(9))) {
+            if (--timeout == 0) { printf("RX timeout!\n"); break; }
         }
 
-        // 【关键】等最后一字节物理线上发送完成
-        // 之前只等缓冲器可写，不等于物理线上的位流已发出
-        while (!(UART1CON & BIT(8)));   // TXPND=1 表示 TX buffer 空 + shift reg 空
-        UART1CPND = BIT(8);             // 清 TXPND
-
-        // 再等 1ms 让 RX shift register 把回环数据搬进来
-        delay_ms(1);
-
-        // 接收（带超时）
-        for (u32 i = 0; i < tx_len; i++) {
-            u32 rx = test_uart1_rx_byte(100000);   // 100ms 超时
-            if (rx == 0xFFFFFFFFul) {
-                TEST_LOG("  [TIMEOUT] RX byte %u timeout", (u32)i);
-                err_cnt++;
-                break;
-            }
-            rx_buf[i] = (u8)rx;
-        }
-
-        // 验证
-        rx_buf[tx_len] = '\0';
-        TEST_LOG("  RX got: '%s'", rx_buf);
-
-        u32 match_cnt = 0;
-        for (u32 i = 0; i < tx_len; i++) {
-            if (rx_buf[i] == (u8)tx_msg[i]) match_cnt++;
-        }
-
-        if (match_cnt == tx_len && err_cnt == 0) {
-            TEST_LOG("  Loopback PASS (%u/%u bytes match)", match_cnt, tx_len);
-        } else {
-            TEST_LOG("  Loopback FAIL (%u/%u match, %u timeouts)",
-                     match_cnt, tx_len, err_cnt);
+        u8 rx = (u8)UART2DATA;
+        total++;
+        if (rx != (u8)val) {
+            errors++;
+            if (errors <= 5) printf("ERR: sent=0x%02X rx=0x%02X\n", val, rx);
         }
     }
 
-    // ===== Test 3: Poll-RX @ 9600 =====
-    TEST_LOG("[Test 3] Poll-RX @ 9600 baud");
-    TEST_LOG("  Send any byte from external device to PA6 (RX)");
-
-    test_uart1_init(UART1_BAUD_9600);
-
-    {
-        u32 t0 = TMR2CNT;
-        u32 timeout_ms = 5000;     // 5 秒超时
-        u32 rx = 0xFFFFFFFFul;
-        while ((u32)(TMR2CNT - t0) < timeout_ms * 1000) {
-            if (UART1CON & BIT(9)) {
-                UART1CPND = BIT(9);
-                rx = (u32)(UART1DATA & 0xFF);
-                break;
-            }
-        }
-        if (rx == 0xFFFFFFFFul) {
-            TEST_LOG("  [TIMEOUT] No byte received in 5s (skip if no external source)");
-        } else {
-            TEST_LOG("  RX got: 0x%02x ('%c')", (u32)rx,
-                     (rx >= 32 && rx < 127) ? rx : '?');
-        }
-    }
-
-    TEST_LOG("========================================");
-    TEST_LOG("UART1 test done");
-    TEST_LOG("========================================");
-
+    printf("\n===== Result =====\nTotal: %d, Errors: %d\n", total, errors);
+    if (errors == 0) printf("ALL PASSED!\n");
     while (1);
 }
+
+// ================================================================
+//  测试 2: 持续发送 (PB2 TX → USB转TTL → PC 串口助手)
+//  接线: PB2 → USB-TTL RX, GND → GND
+// ================================================================
+void test_uart2_send_run(void)
+{
+    printf("\n===== BT892X UART2 Send Test =====\n\n");
+
+    uart2_test_init();
+
+    printf("UART2 TX = PB2, 115200bps 8N1\n");
+    printf("Wiring: PB2 -> USB-TTL RX, GND -> GND\n");
+    printf("Open serial monitor @ 115200, 8N1\n\n");
+
+    u32 count = 0;
+    while (1) {
+        // 发送递增计数 + 测试字符串
+        uart2_putc('\r');
+        uart2_putc('\n');
+        uart2_putc('[');
+        // 手动打印数字 (避免依赖 printf 重定向)
+        char buf[16];
+        int i = 0;
+        u32 n = count;
+        if (n == 0) buf[i++] = '0';
+        while (n) { buf[i++] = '0' + (n % 10); n /= 10; }
+        while (i > 0) uart2_putc(buf[--i]);
+
+        uart2_putc(']');
+        uart2_putc(' ');
+        uart2_putc('H');
+        uart2_putc('e');
+        uart2_putc('l');
+        uart2_putc('l');
+        uart2_putc('o');
+        uart2_putc(' ');
+        uart2_putc('U');
+        uart2_putc('A');
+        uart2_putc('R');
+        uart2_putc('T');
+        uart2_putc('2');
+        uart2_putc('!');
+
+        count++;
+        delay_ms(500);
+    }
+}
+
+// ================================================================
+//  测试 3: 持续接收 (PC 串口助手 → USB转TTL → PB1 RX)
+//  接线: USB-TTL TX → PB1, GND → GND
+//  收到的数据通过 UART0 printf 打印到串口
+// ================================================================
+void test_uart2_recv_run(void)
+{
+    printf("\n===== BT892X UART2 Recv Test =====\n\n");
+
+    uart2_test_init();
+
+    printf("UART2 RX = PB1, 115200bps 8N1\n");
+    printf("Wiring: USB-TTL TX -> PB1, GND -> GND\n");
+    printf("Send data from PC serial monitor @ 115200\n");
+    printf("Received bytes will be printed here:\n\n");
+
+    while (1) {
+        u8 ch = uart2_getc();
+
+        // 可打印字符直接显示，控制字符显示十六进制
+        if (ch >= 0x20 && ch <= 0x7E) {
+            printf("UART2 RX: '%c' (0x%02X)\n", ch, ch);
+        } else if (ch == '\r' || ch == '\n') {
+            printf("UART2 RX: <CR/LF> (0x%02X)\n", ch);
+        } else {
+            printf("UART2 RX: 0x%02X\n", ch);
+        }
+    }
+}
+
+// ================================================================
+//  测试 4: UART2 控制台/回显 —— printf 重定向到 UART2，收发一起验证
+//  接线: PB2(TX) → USB-TTL RX，PB1(RX) ← USB-TTL TX，GND ↔ GND
+//  在 PC 串口助手(115200 8N1)里敲字符 → 芯片经 UART2 收到(验证收) →
+//  用 printf 回显 → 经重定向由 UART2 发回(验证发 + printf 重定向)
+// ================================================================
+
+/* printf 输出回调：把一个字符经 UART2 发出（供 my_printf_init 注册） */
+static void uart2_console_putchar(char ch)
+{
+    uart2_putc((u8)ch);
+}
+
+void test_uart2_console_run(void)
+{
+    uart2_test_init();
+
+    // ★ 把 printf 从 UART0(PB3) 重定向到 UART2(PB2)
+    //   my_printf_init 是 ROM 提供的回调注册接口（reset.S .set 0x8401c，clib.h 声明）
+    my_printf_init(uart2_console_putchar);
+
+    printf("\r\n===== BT892X UART2 Console (printf -> UART2) =====\r\n");
+    printf("UART2: TX=PB2, RX=PB1, 115200bps 8N1\r\n");
+    printf("Wiring: PB2->USB-TTL RX, PB1<-USB-TTL TX, GND-GND\r\n");
+    printf("Type chars in PC serial monitor; they will be echoed back:\r\n");
+
+    while (1) {
+        u8 ch = uart2_getc();      // 硬件 UART2 接收（验证收）
+        uart2_putc(ch);            // 原样回显（验证发）
+        if (ch == '\r') uart2_putc('\n');
+    }
+}
+

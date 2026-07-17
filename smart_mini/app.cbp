@@ -58,6 +58,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_uart.h" />
+		<Unit filename="test/test_uart_soft.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_uart_soft.h" />
 		<Unit filename="test/test_i2c.c">
 			<Option compilerVar="CC" />
 		</Unit>

@@ -3,6 +3,7 @@
 #include "test/test_timer.h"
 #include "test/test_timer_pwm.h"
 #include "test/test_uart.h"
+#include "test/test_uart_soft.h"
 #include "test/test_i2c.h"
 #include "test/test_i2c_la.h"
 #include "test/test_i2c_gpio.h"
@@ -19,6 +20,10 @@ extern void test_gpio_run(void);
 extern void test_timer_run(void);
 extern void test_timer_pwm_run(void);
 extern void test_uart_run(void);
+extern void test_uart2_send_run(void);
+extern void test_uart2_recv_run(void);
+extern void test_uart2_console_run(void);
+extern void test_uart_soft_run(void);
 extern void test_i2c_run(void);
 extern void test_i2c_la_run(void);
 extern void test_i2c_gpio_run(void);
@@ -28,9 +33,14 @@ extern void test_i2c_gpio_la_run(void);
 // Default: hardware I2C + AT24C02 functional test
 // Comment out the default and uncomment one of the others to switch
 // #define TEST_GPIO_EN    1
- #define TEST_TIMER_EN   1
+// #define TEST_TIMER_EN   1
 // #define TEST_TIMER_PWM_EN  1   // TMR3 三路 PWM (PB0/PB1/PB2)；注意与 UART2 共用 PB1/PB2，不能与 TEST_UART_EN 同开
-// #define TEST_UART_EN    1
+// ---- UART：软/硬各一份，共用 PB2(TX)/PB1(RX)，一次只开一个 ----
+// #define TEST_UART_EN    1        // 硬件 UART2 回环 (跳线 PB2<->PB1)
+// #define TEST_UART_SEND_EN  1   // 硬件 UART2 持续发送 (PB2->USB-TTL)
+ #define TEST_UART_RECV_EN  1   // 硬件 UART2 持续接收 (USB-TTL->PB1)
+// #define TEST_UART_CONSOLE_EN 1  // 硬件 UART2 收发回显 + printf 重定向到 UART2 (PB2/PB1)
+// #define TEST_UART_SOFT_EN  1     // 软件 bit-bang UART 回环 (跳线 PB2<->PB1, 9600 8N1)
 // #define TEST_I2C_EN    1
 // #define TEST_I2C_LA_EN   1
 // #define TEST_I2C_GPIO_EN      1
@@ -235,6 +245,18 @@ int main(void)
 #endif
 #ifdef TEST_UART_EN
     test_uart_run();
+#endif
+#ifdef TEST_UART_SEND_EN
+    test_uart2_send_run();
+#endif
+#ifdef TEST_UART_RECV_EN
+    test_uart2_recv_run();
+#endif
+#ifdef TEST_UART_CONSOLE_EN
+    test_uart2_console_run();
+#endif
+#ifdef TEST_UART_SOFT_EN
+    test_uart_soft_run();
 #endif
 // #ifdef TEST_SPI_EN
 //     test_spi_run();
