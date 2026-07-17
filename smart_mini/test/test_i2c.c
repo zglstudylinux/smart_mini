@@ -344,6 +344,98 @@ void test_i2c_run(void)
         }
     }
 
+    delay_ms(500);
+
+    // ===== Test 6: 两种 IIC 时钟源验证（用 TMR2 测 SCL 周期） =====
+    TEST_LOG("[Test 6] I2C clock source verification");
+    TEST_LOG("  Use TMR2 (1us tick) to measure SCL period");
+    {
+        u32 saved_clkcon2 = CLKCON2;
+        u32 saved_clkcon1 = CLKCON1;
+        u32 saved_iiccon0 = IICCON0;
+
+        // 计算每个 START+addr+ACK+STOP 事务中的 SCL 时钟数（=9）：
+        //   START  SCL高+SDA降 — 不算 SCL clock
+        //   8 个 SCL 时钟（地址字节）
+        //   1 个 SCL 时钟（ACK 时槽）
+        //   STOP   SCL高+SDA升 — 不算 SCL clock
+        // 总 9 个 SCL 周期/事务
+        const u32 SCL_PER_TX = 9;
+
+        // ---------- 6a: RC2M source ----------
+        TEST_LOG("[Test 6a] Source = RC2M (~2 MHz), CLKCON1[23] = 0");
+        TEST_LOG("  expected SCL period = 10 us, freq = 100 kHz");
+        CLKCON1 &= ~BIT(23);                  // 选 RC2M
+        IICCON0 = (saved_iiccon0 & ~(0x3Ful << 4)) | (19ul << 4);  // POSDIV = 19
+        delay_us(100);
+
+        {
+            // 多次探测平均，减小单次 IIC 开销影响
+            const u32 N = 10;
+            u32 t0 = TMR2CNT;
+            u8 ack_cnt = 0;
+            for (u32 i = 0; i < N; i++) {
+                if (test_iic_probe_addr(AT24C02_ADDR, false, 100000)) {
+                    ack_cnt++;
+                }
+            }
+            u32 t1 = TMR2CNT;
+            u32 elapsed = t1 - t0;
+            // 频率 (kHz) = (N * 9) / (elapsed_us * 1e-6) / 1000
+            //          = N * 9 * 1000 / elapsed_us
+            // 频率 deci-kHz (1 位小数) = N * 9 * 10000 / elapsed_us
+            u32 freq_deci_khz = (elapsed > 0) ? (N * 9u * 10000u / elapsed) : 0;
+            u32 fk = freq_deci_khz / 10;
+            u32 fr = freq_deci_khz % 10;
+            TEST_LOG("  N=%u, ACK=%u/%u, total=%u us, SCL freq ~ %u.%u kHz (含 IIC 开销估算)",
+                     N, ack_cnt, N, elapsed, fk, fr);
+        }
+
+        delay_ms(10);
+
+        // ---------- 6b: x24m_div_clk source ----------
+        TEST_LOG("[Test 6b] Source = x24m_div_clk, CLKCON1[23] = 1");
+        {
+            u32 div = (saved_clkcon2 >> 24) & 0xFF;
+            u32 x24m_div_khz_est = (div > 0) ? (24000u / (div + 1)) : 0;
+            TEST_LOG("  CLKCON2[31:24] = %u (preserved from main.c)", div);
+            TEST_LOG("  estimated x24m_div_clk is about %u kHz (assumes 24M src)", x24m_div_khz_est);
+
+            // 用 IICCLK 估算值自动选 POSDIV，瞄准 100 kHz
+            u32 posdiv = (x24m_div_khz_est > 100) ? (x24m_div_khz_est / 100u - 1u) : 1u;
+            if (posdiv > 63) posdiv = 63;
+
+            TEST_LOG("  Setting POSDIV=%u, expected SCL about %u kHz",
+                     posdiv,
+                     x24m_div_khz_est / (posdiv + 1));
+
+            CLKCON1 |= BIT(23);  // 选 x24m_div_clk
+            IICCON0 = (saved_iiccon0 & ~(0x3Ful << 4)) | ((u32)posdiv << 4);
+            delay_us(100);
+
+            u32 t0 = TMR2CNT;
+            u8 ack_cnt = 0;
+            const u32 N = 10;
+            for (u32 i = 0; i < N; i++) {
+                if (test_iic_probe_addr(AT24C02_ADDR, false, 100000)) {
+                    ack_cnt++;
+                }
+            }
+            u32 t1 = TMR2CNT;
+            u32 elapsed = t1 - t0;
+            u32 freq_deci_khz = (elapsed > 0) ? (N * 9u * 10000u / elapsed) : 0;
+            u32 fk = freq_deci_khz / 10;
+            u32 fr = freq_deci_khz % 10;
+            TEST_LOG("  N=%u, ACK=%u/%u, total=%u us, SCL freq ~ %u.%u kHz (含 IIC 开销估算)",
+                     N, ack_cnt, N, elapsed, fk, fr);
+        }
+
+        // 恢复（保留 main.c 设置，不动 CLKCON2）
+        IICCON0 = saved_iiccon0;
+        CLKCON1 = saved_clkcon1;
+        TEST_LOG("  Restored CLKCON1/CLKCON2 to main.c settings");
+    }
+
     TEST_LOG("========================================");
     TEST_LOG("I2C test done");
     TEST_LOG("========================================");

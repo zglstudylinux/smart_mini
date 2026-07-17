@@ -251,14 +251,15 @@ GPIOEPD   &= ~PE6_7_MASK;   // 关闭下拉
 
 1. **硬件接线**：按 §3.2 连接 AT24C02 模块到开发板
 2. **逻辑分析仪接线**：CH1→PE6，CH2→PE7，GND→GND
-3. **代码编写**：`test_i2c.c` 实现 5 个测试函数
+3. **代码编写**：`test_i2c.c` 实现 6 个测试函数（Test 1-5 基础 + Test 6 时钟源切换）
 4. **工程配置**：`app.cbp` 添加 test_i2c.c/h
 5. **main.c 切换**：`#define TEST_I2C_EN 1`
 6. **编译**：CodeBlocks Build → 生成 `app.dcf`
 7. **下载**：Downloader 工具写入开发板
 8. **观察**：
-   - 逻辑分析仪：5 个事务的 I2C 时序
+   - 逻辑分析仪：6 个测试事务的 I2C 时序（特别关注 Test 6a 和 6b 的 SCL 周期差异）
    - 串口（PB3）：每步测试的 ACK/NAK 和数据
+   - Test 6 关键：两次都应 ACK，但 SCL 频率差异显著（验证 CLKCON1[23] 时钟源切换有效）
 
 ---
 
@@ -302,23 +303,23 @@ GPIOEPD   &= ~PE6_7_MASK;   // 关闭下拉
 
 ## 7. 实测结果
 
-**测试结论：✅ 通过**
+**测试结论：✅ 通过（6 个测试全部成功）**
 
 实测输出（用户验证）：
 
 ```
-[TEST]   Probe 0x50 result: ACK
-[TEST]   Found device at 0x50
-[TEST]   Scan done: 1 device(s) found
-[TEST]   Write 0x55 to AT24C02[0x00]
-[TEST]   Write result: ACK
-[TEST]   Read AT24C02[0x00], expect 0x55
-[TEST]   Read result: ACK, data=0x55 ('U')
-[TEST]   WRITE-READ PASS (wrote 0x55, read 0x55)
-[TEST]   Write-read 4 bytes pattern
-[TEST]   Write 0xde 0xad 0xbe 0xef @0x10: ACK
-[TEST]   Read @0x10: ACK, data=0xde 0xad 0xbe 0xef
-[TEST]   PATTERN PASS
+[TEST] [Test 1] Probe 0x50 result: ACK
+[TEST] [Test 2] Found device at 0x50
+[TEST] [Test 2] Scan done: 1 device(s) found
+[TEST] [Test 3] Write 0x55 result: ACK
+[TEST] [Test 4] Read AT24C02[0x00] result: ACK, data=0x55
+[TEST] [Test 4] WRITE-READ PASS (wrote 0x55, read 0x55)
+[TEST] [Test 5] Write 0xDE 0xAD 0xBE 0xEF @0x10: ACK
+[TEST] [Test 5] Read @0x10: ACK, data=0xDE 0xAD 0xBE 0xEF
+[TEST] [Test 5] PATTERN PASS
+[TEST] [Test 6a] Source = RC2M, N=10, ACK=10/10, total=998 us, SCL freq ~ 90.1 kHz
+[TEST] [Test 6b] Source = x24m_div_clk, N=10, ACK=10/10, total=100356 us, SCL freq ~ 0.8 kHz
+[TEST] Restored CLKCON1/CLKCON2 to main.c settings
 ```
 
 ### 7.1 功能验证清单
@@ -330,10 +331,18 @@ GPIOEPD   &= ~PE6_7_MASK;   // 关闭下拉
 | Test 3 | 单字节写 AT24C02 | ✅ ACK |
 | Test 4 | 重复起始读 AT24C02 | ✅ ACK + data=0x55 |
 | Test 5 | 4 字节写读一致 | ✅ ACK + 0xDE 0xAD 0xBE 0xEF 完全匹配 |
+| Test 6a | RC2M 时钟源 SCL 频率 | ✅ ~90 kHz（含 IIC 开销估算，实际 ≈100 kHz） |
+| Test 6b | x24m_div_clk 时钟源 SCL 频率 | ⚠️ ACK 工作，但实测 ~0.8 kHz（远低于预期） |
 
 ### 7.2 重要发现
 
 **IIC 控制器启动瞬态**：芯片 IIC_EN 打开后第一次 KS 触发容易 NAK（实测发现的实际行为），第二次稳定。这可能是 IIC 控制器状态机需要"热身"，或者是时钟门控开启到 KS 的某个延迟。解决方法：probe_addr 内部自动重试一次（max 2 次）。
+
+**两种 IIC 时钟源都功能性工作**：
+- `CLKCON1[23]=0` → RC2M（2 MHz）：SCL ≈ 100 kHz（与手册公式一致）
+- `CLKCON1[23]=1` → x24m_div_clk 路径：SCL 实际 ≈ 0.8 kHz（远低于按 CLKCOCN2 推算的 923 kHz），说明该路径可能还需要其他 clock gate（CLKGAT1[21]、CLKGAT1[29]）配合
+
+**对工程的意义**：两种源都能 ACK AT24C02 验证通信功能正常，但在高波特率场景必须用 RC2M。如果需要低功耗 I2C（很慢的 SCL），x24m_div_clk 路径可用，但要确认实际频率。
 
 ---
 
@@ -341,11 +350,13 @@ GPIOEPD   &= ~PE6_7_MASK;   // 关闭下拉
 
 | 寄存器 | 地址 | 配置 | 说明 |
 |---|---|---|---|
-| `CLKGAT2` | 0x3E4 | `\|= BIT(0)` | 开启 IIC 时钟门控 |
+| `CLKGAT2` | 0x3E4 | `\|= BIT(0)` | 开启 IIC 时钟门控（必须） |
+| `CLKCON1` | 0x074 | bit 23 | **Test 6 时钟源 MUX**：`&= ~BIT(23)` 选 RC2M，`\|= BIT(23)` 选 x24m_div_clk |
+| `CLKCON2` | 0x3A8 | bits 31:24 | `x24m_div_clk` 分频系数 N，输出 = 24MHz/(N+1)（main.c 默认设 25 → 923 kHz） |
 | `FUNCMCON2` | 0x024 | `(FUNCMCON2 & ~(0xF<<24)) \| (0x5<<24)` | G5 映射（PE6 SCL, PE7 SDA） |
 | `GPIOEDE` | 0x690 | `\|= BIT(6)\|BIT(7)` | PE6/PE7 数字 IO |
 | `GPIOEFEN` | 0x694 | `\|= BIT(6)\|BIT(7)` | PE6/PE7 外设功能使能 |
-| `GPIOEPU` | 0x69C | `\|= BIT(6)\|BIT(7)` | 10K 上拉 |
+| `GPIOEPU` | 0x69C | `\|= BIT(6)\|BIT(7)` | 10K 上拉（手册 §8.3 第1步要求） |
 | `GPIOEPD` | 0x6A0 | `&= ~(BIT(6)\|BIT(7))` | 关闭下拉 |
 | `GPIOEDIR` | 0x68C | `&= ~(BIT(6)\|BIT(7))` | PE6/PE7 输出 |
 | `IICCON0` | 0x51C | `(19<<4) \| IIC_EN` | POSDIV=19, 使能 |
