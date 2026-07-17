@@ -384,6 +384,59 @@ IICCON0 = (19u << 4) | IIC_EN;
 
 ---
 
+## 8. 补充：PB1/PB2 IIC 路径与别人代码验证（test_i2c_pb.c）
+
+### 8.1 用户反馈的代码截图
+
+用户分享了别人使用 **PB1/PB2 + PE6** 实现 IIC 的代码片段：
+```c
+// PB1 = SCL, PB2 = SDA, PE6 = WP (写保护)
+// FUNCMCON2 |= (0x03 << 24);  // G3
+// CLKGAT2    |= BIT(0);
+// CLKCOCN1    |= BIT(23);
+// IICCON0    |= (29 << 4);    // POSDIV = 29, ÷30
+// IICCON0    |= BIT(0) | BIT(1) | BIT(30);  // IIC_EN, INTEN, ackstatus(?)
+// 注意：代码里没有设 CLKGAT1[29]=1
+```
+
+### 8.2 我们建的 test_i2c_pb.c 验证结果
+
+**5 个测试场景的对比**（AT24C02 已接）：
+
+| 测试 | CLKGAT1[29] | CLKCOCN2[31:24] | POSDIV | 结果 |
+|---|---|---|---|---|
+| **A** (参考) | ❌ 不设 | ❌ 不改 (默认 25) | 29 | **ACK 10/10, ~85 kHz** ✅ |
+| B | ✅ 设 | ❌ 不改 | 29 | ACK 10/10, ~85 kHz（不变） |
+| C | ✅ BIT(21)\|BIT(29) | ✅ = 11 | 29 | ACK 10/10, **~38 kHz**（变慢！） |
+| D | ❌ | ❌ | 29 + CLKCOCN1[23]=0 | 慢（20 ms/call, 极低 SCL） |
+| E | ✅ BIT(29) | ✅ = 11 | 19 | 慢（20 ms/call, 极低 SCL） |
+
+### 8.3 关键发现
+
+1. **PB1/PB2 路径（G3 映射）的 IIC 时钟来源与 PE6/PE7 路径（G5）不同**
+   - PB1/PB2 默认就有 3 MHz 时钟（推测来自固定 Div8 = 24M/8）
+   - PE6/PE7 需要手动开 CLKGAT1[29]=1 才能达到 2 MHz
+   - 两个引脚组的 IIC 时钟路径在硬件层面就有差异
+
+2. **CLKCOCN2[31:24] 不是 PB1/PB2 时钟的主控制**
+   - 设 CLKCOCN2=11（强制 Div=12）反而让 PB1/PB2 时钟变慢
+   - Test E（强制 CLKCOCN2 + POSDIV=19）完全坏掉
+   - 说明 CLKCOCN2 控制的是另一条路径（可能是 PE6/PE7 用的）
+
+3. **用户分享的参考代码是正确的**
+   - 简单配置（POSDIV=29, G3）就能稳定通信
+   - 不需要手动设置 CLKGAT1/CLKCON2
+   - 适用于 PB1/PB2 IIC 总线
+
+### 8.4 实际工程选择
+
+| 场景 | 推荐引脚 | 时钟路径 | 初始化 |
+|---|---|---|---|
+| **PB1/PB2** (IIC_G3) | PB1=CLK, PB2=SDA, PE6=WP | 默认 3 MHz | `CLKGAT2\|=BIT(0)` + `FUNCMCON2\|=0x3<<24` + `IICCON0=(POSDIV<<4)\|IIC_EN` |
+| **PE6/PE7** (IIC_G5) | PE6=CLK, PE7=SDA | 需开 CLKGAT1[29]=1 给 2 MHz | `CLKGAT1\|=BIT(21)\|BIT(29)` + `CLKCON2\|=11<<24` + `FUNCMCON2\|=0x5<<24` |
+
+---
+
 ## 8. 寄存器配置表
 
 | 寄存器 | 地址 | 配置 | 说明 |
