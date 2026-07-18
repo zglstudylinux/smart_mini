@@ -156,10 +156,11 @@ void test_spi_soft_asm_run(void)
            d_unr * 100 / (s32)t_c);
 
     printf("\n=== Analysis ===\n");
-    printf("Bottleneck: delay_us(1) * 4/bit * 8bit = ~32us/byte minimum.\n");
+    printf("Bottleneck: delay_us(1) * 3/bit * 8bit = ~24us/byte minimum.\n");
     printf("C compiler already optimizes GPIO writes efficiently.\n");
-    printf("Inline ASM adds overhead (register loading, volatile barrier).\n");
-    printf("Unrolling helps ~1-2%% by eliminating loop branches.\n");
+    printf("Inline ASM (loop) has small register/volatile overhead.\n");
+    printf("Inline ASM (unrolled) is SLOWER here -- volatile barrier overhead\n");
+    printf("  outweighs the saved loop branches.\n");
 
     // 功能性验证
     printf("\n=== Functional Check (W25Q64 JEDEC ID) ===\n");

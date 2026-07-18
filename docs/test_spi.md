@@ -9,7 +9,7 @@
 > - [bt892x_pinfunction.md §4.3 PORTE / §5.2 SPI1](../bt892x_pinfunction.md)
 > **相关 commit**：`git log smart_mini_minimax` 查看
 > **测试模块**：**软/硬 SPI 回环 + 逻辑分析仪波形 + W25Q64 Flash + 汇编优化 + polling/INT/DMA 时间对比**
-> **测试结果**：✅ Phase 1 回环（软+硬 256/256）✅ Phase 2 波形（软+硬 0x55 LA 解码正确）⬜ Phase 3 W25Q64 + ASM + 时间对比（已就绪，待后续测试）
+> **测试结果**：✅ Phase 1 回环（软+硬 256/256）✅ Phase 2 波形（软+硬 0x55 LA 解码正确）✅ Phase 3 W25Q64 全套软硬 8/10 实验 ✅ Phase 4 ASM 速度对比（C 略胜）✅ Phase 5 Polling/Interrupt/DMA 三方对比（DMA 高速 4× 加速）
 
 ---
 
@@ -236,33 +236,92 @@ delay_us(100);               // 字节间间隔供 LA 帧对齐
 
 ---
 
-## 4. Phase 3：test_spi_w25q64.c（软/硬 W25Q64 全套实验） ⬜ 待测
+## 4. Phase 3：test_spi_w25q64.c（软/硬 W25Q64 全套实验） ✅ 已测
 
-代码已就绪。运行时配置（构建选项）：
-- `-DSPI_W25_RUN_MODE=2` 一键跑完软+硬
-- `-DSPI_W25_RUN_MODE=0`（默认）只软，`=1` 只硬
-- 软件/硬件实验分别由 `SPI_SW_W25_MODE` 和 `SPI_HW_W25_MODE` 控制 0=单 exp（SPI_*_W25_EXP=1） / 1=全测（含 Chip Erase，会清空 Flash！） / 2=仅读
-- 实验：JEDEC ID、Status、Page Write/Read、Cross-Page、Sector Erase、Erase Timing、Write Protect、Unique ID/SFDP
+接法：W25Q64 CS=PE4/CLK=PE6/DI=PE7/DO=PE5。构建选项：
+- `-DSPI_W25_RUN_MODE=2` 软+硬全跑（默认）；`=0` 只软；`=1` 只硬
+- 软件/硬件 `SPI_SW_W25_MODE`/`SPI_HW_W25_MODE`：`=0` 单 exp；`=1` 全测（含 Chip Erase！会清空 Flash）；`=2` 仅读（只跑 exp1 JEDEC + exp9/10 UID+SFDP，不擦不写，**强烈推荐调试阶段先用**）
 
-**待用户后续测试 + 文档补充**。
+**注**：MODE=1 实测会写/擦 Flash 大量数据，跑完约 1-3 分钟（含 Chip Erase ~20s）。
+
+### 4.1 实测结果（MODE=1 全测，用户验证，软+硬同跑）
+
+| 实验 | 软件结果 | 硬件结果 |
+|---|---|---|
+| exp1 JEDEC ID | `0xEF 0x40 0x17` MATCH | `0xEF 0x40 0x17` OK |
+| exp2 Status Reg | SR1=0x02, SR2=0x00, WE → SR1=0x02 | SR1=0x00, WE → SR1=0x02 |
+| exp3 Page Write 256B | 0/256 errors PASSED | 0/256 errors PASSED |
+| exp4 Cross-Page (start=0xF0, 100B) | 0/100 errors PASSED | 0/100 errors PASSED |
+| exp5 Sector Erase | write 0xA5 / erase all FF / re-write 0xA5 | 同 |
+| exp6 擦除耗时 | Sector 51ms / Block32K 103ms / Block64K 165ms / **Chip 18522ms (~18s)** | 51/103/169/**18640ms** |
+| exp7 Write Protect | BP2=1 → 写保护 → WEL=0 → 解除 BP=0 | 同 |
+| exp9 (SW) / exp10 (HW) UID+SFDP | `D1 63 D4 20 CB 35 50 34` + `53 46 44 50 00 01 00 FF 00 00 01 09 80 00 00 FF` | 同 |
+| exp8 (HW only) Fast Read 速度 | (SW 无此 exp) | 100KHz Standard 170979 / Fast 171082 ticks（差距 ~103 ticks，dummy byte 开销） |
+| exp9 (HW) 100K vs 12M 对比 | (SW 无) | 100K=341602 / **12M=9941** ticks（4096B，~34× 加速） |
+
+**结论**：✅ 软/硬 W25Q64 全套功能齐全。所有命令、状态、写/读/擦/保护全部通过。擦除耗时完全符合 W25Q64 数据手册（chip erase 典型 10-30 s）。
 
 ---
 
-## 5. Phase 4：test_spi_soft_asm.c（软件 bit-bang C vs ASM 速度优化） ⬜ 待测
+## 5. Phase 4：test_spi_soft_asm.c（C vs ASM vs ASM-展开 速度对比） ✅ 已测
 
-代码已就绪。接法：纯 GPIO，无需外围。运行后打印三版本耗时（C / ASM循环 / ASM展开），并用 JEDEC ID 验证三者功能正确性。
+接法：纯 GPIO，无需外围（W25Q64 仅用作 JEDEC 校验）。
 
-**待用户后续测试 + 文档补充**。
+### 5.1 实测结果（用户验证，10000 字节 bit-bang，1 tick = 1µs）
+
+| 版本 | ticks | µs/byte | vs C |
+|---|---|---|---|
+| C（基线） | 584802 | 58.48 | — |
+| ASM（循环） | 582513 | 58.25 | **快 0.39%** |
+| ASM（展开） | 597833 | 59.78 | **慢 2.23%** |
+
+JEDEC ID 功能验证：C / ASM / 展开 **全 PASS**。
+
+### 5.2 关键结论
+
+- **C 已足够好**：简单 GPIO 写 + `delay_us(1)` 调用主导耗时（每字节 3 次 `delay_us(1)` = 24µs **最小理论值**，实测 58µs ≈ 2.4× 开销），现代 GCC `-Os` 已把 GPIO 写操作优化到极致。
+- **Inline ASM 没什么优势**：循环版仅快 0.39%（基本统计噪声），因为 GCC 已经最优。
+- **展开版反而更慢**：每个 bit 都重复内联 `volatile` 块，反复刷流水线 barrier 比省下的循环判断成本更高。
+- **修正了一处错误**：原 copilot 分析文字写 `4/bit × 8 = 32us/byte`，实际代码是 `3/bit × 8 = 24us/byte`。
+
+**何时汇编真有用**：需要**周期精确控制**（如 5Mbps+ bit-bang SPI，每 bit 时间窗口仅 200ns，必须用裸 `nop` 指令精确计时）时汇编才显出优势——本测试范围内的 `delay_us(1)` 调用场景，C 已绰绰有余。
 
 ---
 
-## 6. Phase 5：test_spi_timing.c（polling/INT/DMA 时间对比） ⬜ 待测
+## 6. Phase 5：test_spi_timing.c（Polling / Interrupt / DMA 三方对比） ✅ 已测
 
-代码已就绪。接法：需要 W25Q64 Flash（同 §4）。运行：
-- 中断模式：JEDEC ID + 512B/4096B 中断读取耗时
-- DMA 模式：100 kHz/12 MHz 下 Polling vs DMA 耗时对比，DMA page program 256B 校验
+接法：需要 W25Q64 Flash（同 §4）。同 workload（4096 字节读）在 100KHz + 12MHz 两种速度下，三模式用同一 buffer，data match 验证功能等效。
 
-**待用户后续测试 + 文档补充**。
+### 6.1 实测结果（4096 字节读，用户验证）
+
+#### 100 KHz 三方对比
+| 模式 | ticks | µs/byte | 速度 |
+|---|---|---|---|
+| Polling | 341641 | 83.40 | 12.0 KB/s |
+| Interrupt | 416957 | 101.79 | 9.8 KB/s |
+| DMA | 302815 | **73.92** | 13.5 KB/s |
+
+→ DMA 仅比 Polling **快 13%**（低速时 SPI 硬件时钟主导，CPU 开销不显著）
+
+#### 12 MHz 三方对比
+| 模式 | ticks | µs/byte | 速度 |
+|---|---|---|---|
+| Polling | 10099 | 2.46 | 407 KB/s |
+| Interrupt | 91949 | **22.44** | 45 KB/s |
+| DMA | 2533 | **0.61** | 1640 KB/s |
+
+→ DMA **4.0 倍** Polling 速度（Polling/DMA = 10099/2533 = 3.99x）
+→ 三模式 data match **OK**（三种模式读出同一 4096 字节，内容一致）
+
+**关键发现**：高速（12MHz）下 **Interrupt 模式反比 Polling 慢 9 倍**（22.44 vs 2.46 µs/byte）——ISR 进/出开销 + volatile 自旋等待在高速字节率下成为净负担，每字节 1.66µs SPI 时间远小于 ISR 启动+恢复时间。
+
+### 6.2 实测结论
+
+- **Polling**：永远可用，但 CPU 100% 占用
+- **Interrupt**：**适用低速到中速 SPI（≤1 MHz）**，高速下反而不利
+- **DMA**：**高速批量传输的最佳选择**，传输过程中 CPU 完全空闲
+
+**配套 DMA Page Program 256B**：✅ PASSED（0/256 errors，验证 DMA 写路径同样工作）
 
 ---
 
@@ -274,8 +333,8 @@ delay_us(100);               // 字节间间隔供 LA 帧对齐
 | `SPI1BUF` | 0x984 (`SFR9_BASE+0x21*4`) | 读收/写发 | §7.2 第 501 行 |
 | `SPI1BAUD` | 0x988 (`SFR9_BASE+0x22*4`) | `239`=100kHz / `1`=12MHz | §7.2 第 489 行 |
 | `SPI1CPND` | 0x98C (`SFR9_BASE+0x23*4`) | `= BIT(16)` 清挂起 | §7.2 第 495 行 |
-| `SPI1DMACNT` | 0x990 (`SFR9_BASE+0x24*4`) | 待测（DMA mode 阶段） | §7.2 第 507 行 |
-| `SPI1DMAADR` | 0x994 (`SFR9_BASE+0x25*4`) | 待测（DMA mode 阶段） | §7.2 第 512 行 |
+| `SPI1DMACNT` | 0x990 (`SFR9_BASE+0x24*4`) | 写入字节数启动 DMA（Phase 5 §6） | §7.2 第 507 行 |
+| `SPI1DMAADR` | 0x994 (`SFR9_BASE+0x25*4`) | DMA 缓冲区地址（Phase 5 §6） | §7.2 第 512 行 |
 | `FUNCMCON1` | 0x020 (`SFR0_BASE+0x08*4`) | `[15:12]=4` (SPI1MAP G4) | §3.3 |
 | `GPIOEDE` / `GPIOEFEN` | 0x690 / 0x694 | 软=0/0；硬=1/1 | §3.2 |
 | `GPIOEDIR` | 0x68C | CS/CLK/MOSI=0（输出），MISO=1 | §3.2 |
@@ -308,7 +367,7 @@ delay_us(100);               // 字节间间隔供 LA 帧对齐
 - **5 个测试入口覆盖 SPI 全维度**：跳线回环验证接口、LA 波形验证时序、W25Q64 验证 Flash 命令全集、ASM 验证编译器优化效果、timing 验证中断/DMA 性能。
 - **引脚对齐**：软件 SPI bit-bang 与硬件 SPI1 G4 都使用 PE4=CS/PE6=CLK/PE7=MOSI/PE5=MISO，**一次接线同时测**（注意 W25Q64 测时 PE5 是输出 DI 到 flash，不能跳线）。
 - **手册依据**：每条寄存器操作对应 §7.2/§3.3/§3.2 手册位表；每个引脚对应 pinfunction.md §4.3 PE 端口表。
-- **完成度**：Phase 1（LOOP）+ Phase 2（WAVE）✅，Phase 3-5 ⬜ 待 W25Q64/时间对比/汇编 实测。
+- **完成度**：5 个 Phase 全部 ✅。**Polling/Interrupt/DMA 三方对比**给出关键经验：高速 SPI（≥1 MHz）下**优先用 DMA**；低速 SPI + 偶尔传输**用 Interrupt 省 CPU**；阻塞小数据**用 Polling 最简单**。
 
 ---
 

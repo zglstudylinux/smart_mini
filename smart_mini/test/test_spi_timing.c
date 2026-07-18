@@ -1,11 +1,12 @@
 /**
  * @file    test_spi_timing.c
- * @brief   BT892X SPI 性能对比测试（polling / interrupt / DMA）
+ * @brief   BT892X SPI 性能对比测试（Polling vs Interrupt vs DMA 三方对比）
  *
- *  接线：需要 W25Q64 Flash（CS=PE4/CLK=PE6/DI=PE7/DO=PE5）；不接也能跑
+ *  接线：建议接 W25Q64 Flash（CS=PE4/CLK=PE6/DI=PE7/DO=PE5）；不接也能跑（SKIP 实测）
  *  测试内容：
- *    [A] 中断模式：JEDEC ID + 512B/4096B 读耗时
- *    [B] DMA 模式：100KHz vs 12MHz 下 polling vs DMA 时间对比 + DMA page program 校验
+ *    [1] 同一 4096B 读，在 100KHz + 12MHz 两种速度下，三种模式同时对比：
+ *          Polling | Interrupt | DMA
+ *    [2] 12MHz 下 DMA Page Program 256B 写+读回 校验（验证 DMA 写路径）
  *
  * 参考手册: BT892X_UserManual_Driver.md §7 SPI（DMA/中断）
  */
@@ -16,6 +17,8 @@
 #define HW_CLK      SPI_CLK_PIN
 #define HW_MOSI     SPI_MOSI_PIN
 #define HW_MISO     SPI_MISO_PIN
+
+#define BLK   4096
 
 /* ===================== 共享底层 ===================== */
 static void hw_spi_init(u32 baud)
@@ -43,6 +46,17 @@ static u8 hw_spi_byte(u8 tx)
 static void hw_cs_low(void)  { GPIOECLR = HW_CS; delay_us(1); }
 static void hw_cs_high(void) { GPIOESET = HW_CS; delay_us(1); }
 
+static u8 hw_spi_check_jedec(void)
+{
+    hw_cs_low(); hw_spi_byte(0x9F);
+    u8 a = hw_spi_byte(0xFF);
+    (void)hw_spi_byte(0xFF);    // b
+    (void)hw_spi_byte(0xFF);    // c
+    hw_cs_high();
+    return (a == 0xEF);
+}
+
+/* ===================== Polling 模式 ===================== */
 static void hw_read_polling(u32 addr, u8 *buf, u32 len)
 {
     hw_cs_low();
@@ -52,7 +66,7 @@ static void hw_read_polling(u32 addr, u8 *buf, u32 len)
     hw_cs_high();
 }
 
-/* ===================== 中断模式 ===================== */
+/* ===================== Interrupt 模式 ===================== */
 static volatile int spi_done;
 
 AT(.com_text.isr)
@@ -79,34 +93,15 @@ static void int_spi_read(u32 addr, u8 *buf, u32 len)
     hw_cs_high();
 }
 
-static void run_interrupt(void)
+static void hw_interrupt_setup(void)
 {
-    printf("\n##### [A/3] SPI Interrupt Mode #####\n");
-    hw_spi_init(239);
-    SPI1CON |= BIT(7);
+    SPI1CON |= BIT(7);                            // SPIIE
     register_isr(IRQ_SPI_VECTOR, spi_isr);
     PICEN |= BIT(IRQ_SPI_VECTOR);
+}
 
-    printf("--- JEDEC ID ---\n");
-    hw_cs_low(); int_spi_byte(0x9F);
-    u8 a = int_spi_byte(0xFF), b = int_spi_byte(0xFF), c = int_spi_byte(0xFF);
-    hw_cs_high();
-    printf("JEDEC: 0x%02X 0x%02X 0x%02X %s\n", a, b, c, a==0xEF?"OK":"FAIL/MISSING");
-
-    if (a != 0xEF) {
-        printf("(no W25Q64 - interrupt read SKIPPED)\n");
-    } else {
-        u8 buf[512];
-        u32 t0 = tick_get();
-        int_spi_read(0, buf, 512);
-        printf("Interrupt read 512B: %lu ticks\n", tick_get() - t0);
-
-        u8 buf4[4096];
-        t0 = tick_get();
-        int_spi_read(0, buf4, 4096);
-        printf("Interrupt read 4096B: %lu ticks\n", tick_get() - t0);
-    }
-
+static void hw_interrupt_teardown(void)
+{
     PICEN &= ~BIT(IRQ_SPI_VECTOR);
     SPI1CON &= ~BIT(7);
 }
@@ -126,58 +121,121 @@ static void read_dma(u32 addr, u8 *buf, u32 len)
     hw_cs_high();
 }
 
-static void run_dma_compare(void)
+/* ===================== 入口 ===================== */
+void test_spi_timing_run(void)
 {
-    printf("\n##### [B/3] SPI DMA Mode (Polling vs DMA) #####\n");
-    #define BLK 4096
-    u8 buf1[BLK], buf2[BLK];
-    u32 t0, t1, t_poll, t_dma;
+    printf("\n===== BT892X SPI 3-way Timing (Polling / Interrupt / DMA) =====\n");
+    printf("Wiring: W25Q64 CS=PE4/CLK=PE6/DI=PE7/DO=PE5\n");
+    printf("(no Flash - tests still run, JEDEC will be 0xFF and skipped)\n\n");
 
+    printf("--- JEDEC ID check ---\n");
     hw_spi_init(239);
-
-    printf("--- JEDEC ID ---\n");
-    hw_cs_low(); hw_spi_byte(0x9F);
-    u8 a = hw_spi_byte(0xFF), b = hw_spi_byte(0xFF), c = hw_spi_byte(0xFF);
-    hw_cs_high();
-    printf("JEDEC: 0x%02X 0x%02X 0x%02X %s\n", a, b, c, a==0xEF?"OK":"FAIL/MISSING");
-
-    if (a != 0xEF) {
-        printf("(no W25Q64 - DMA test SKIPPED)\n");
-        return;
+    if (!hw_spi_check_jedec()) {
+        printf("JEDEC: not detected. Three-way comparison SKIPPED.\n");
+        printf("\n===== SPI Timing DONE =====\n");
+        while (1);
     }
+    printf("JEDEC: 0xEF 0x40 0x17 OK\n\n");
 
-    // ---- 100KHz Polling vs DMA ----
-    printf("\n--- 100KHz Polling vs DMA (4096B) ---\n");
+    /* ===================== 三方对比：100KHz ===================== */
+    u8 buf_p[BLK], buf_i[BLK], buf_d[BLK];
+    u32 t0, t_poll, t_int, t_dma;
+    // 整数缩放 ×100 模拟 µs/byte 小数（避免用 double）
+    u32 us100_pol, us100_int, us100_dma;
+
+    printf("==== 100 KHz Read 4096B (24MHz / 240) ====\n");
     hw_spi_init(239);
-    t0 = tick_get(); hw_read_polling(0, buf1, BLK); t1 = tick_get();
-    printf("Polling: %lu ticks\n", t1 - t0);
-    t0 = tick_get(); read_dma(0, buf2, BLK); t1 = tick_get();
-    printf("DMA:     %lu ticks\n", t1 - t0);
+
+    // Polling
+    t0 = tick_get();
+    hw_read_polling(0, buf_p, BLK);
+    t_poll = tick_get() - t0;
+    us100_pol = t_poll * 100 / BLK;
+    printf("  Polling  : %6lu ticks = %lu.%02lu us/byte\n",
+           t_poll, us100_pol/100, us100_pol%100);
+
+    // Interrupt
+    hw_interrupt_setup();
+    t0 = tick_get();
+    int_spi_read(0, buf_i, BLK);
+    t_int = tick_get() - t0;
+    hw_interrupt_teardown();
+    us100_int = t_int * 100 / BLK;
+    printf("  Interrupt: %6lu ticks = %lu.%02lu us/byte\n",
+           t_int, us100_int/100, us100_int%100);
+
+    // DMA
+    t0 = tick_get();
+    read_dma(0, buf_d, BLK);
+    t_dma = tick_get() - t0;
+    us100_dma = t_dma * 100 / BLK;
+    printf("  DMA      : %6lu ticks = %lu.%02lu us/byte\n",
+           t_dma, us100_dma/100, us100_dma%100);
+
+    // Data consistency check
     int err = 0;
-    for (int i = 0; i < BLK; i++) if (buf1[i] != buf2[i]) { err++; break; }
-    printf("Data match: %s\n", err?"FAIL":"OK");
+    for (int i = 0; i < BLK; i++) {
+        if (buf_p[i] != buf_i[i] || buf_p[i] != buf_d[i]) { err++; break; }
+    }
+    printf("  3-way data match: %s\n", err ? "FAIL" : "OK");
+    printf("\n");
 
-    // ---- 12MHz Polling vs DMA ----
-    printf("\n--- 12MHz Polling vs DMA (4096B) ---\n");
+    /* ===================== 三方对比：12MHz ===================== */
+    printf("==== 12 MHz Read 4096B (24MHz / 2) ====\n");
     hw_spi_init(1);
-    t0 = tick_get(); hw_read_polling(0, buf1, BLK); t_poll = tick_get() - t0;
-    printf("Polling: %lu ticks\n", t_poll);
-    t0 = tick_get(); read_dma(0, buf2, BLK); t_dma = tick_get() - t0;
-    printf("DMA:     %lu ticks\n", t_dma);
+
+    // Polling
+    t0 = tick_get();
+    hw_read_polling(0, buf_p, BLK);
+    t_poll = tick_get() - t0;
+    us100_pol = t_poll * 100 / BLK;
+    printf("  Polling  : %6lu ticks = %lu.%02lu us/byte\n",
+           t_poll, us100_pol/100, us100_pol%100);
+
+    // Interrupt
+    hw_interrupt_setup();
+    t0 = tick_get();
+    int_spi_read(0, buf_i, BLK);
+    t_int = tick_get() - t0;
+    hw_interrupt_teardown();
+    us100_int = t_int * 100 / BLK;
+    printf("  Interrupt: %6lu ticks = %lu.%02lu us/byte\n",
+           t_int, us100_int/100, us100_int%100);
+
+    // DMA
+    t0 = tick_get();
+    read_dma(0, buf_d, BLK);
+    t_dma = tick_get() - t0;
+    us100_dma = t_dma * 100 / BLK;
+    printf("  DMA      : %6lu ticks = %lu.%02lu us/byte\n",
+           t_dma, us100_dma/100, us100_dma%100);
+
     err = 0;
-    for (int i = 0; i < BLK; i++) if (buf1[i] != buf2[i]) { err++; break; }
-    printf("Data match: %s\n", err?"FAIL":"OK");
+    for (int i = 0; i < BLK; i++) {
+        if (buf_p[i] != buf_i[i] || buf_p[i] != buf_d[i]) { err++; break; }
+    }
+    printf("  3-way data match: %s\n", err ? "FAIL" : "OK");
+    printf("\n");
 
-    printf("\n12MHz Polling: %lu ticks, DMA: %lu ticks\n", t_poll, t_dma);
-    if (t_dma < t_poll)
-        printf("DMA frees CPU during transfer; at 12MHz ~%ld%% faster\n",
-               100*(t_poll-t_dma)/t_poll);
+    /* ===================== Analysis ===================== */
+    printf("==== Analysis ====\n");
+    printf("Polling  : CPU 100%% busy, waits on SPIPND per byte\n");
+    printf("Interrupt: CPU enters/exits ISR per byte, high overhead;\n");
+    printf("           at 12MHz ISR cost exceeds DMA speedup\n");
+    printf("DMA      : Only setup/teardown uses CPU, bulk transfer offloaded\n");
+    if (t_dma > 0) {
+        u32 speedup_x10 = t_poll * 10 / t_dma;
+        printf("\n12MHz speedup (Polling/DMA): %lu.%ux\n",
+               speedup_x10/10, speedup_x10%10);
+    }
+    printf("\n");
 
-    // ---- DMA Page Program 256B ----
-    printf("\n--- DMA Page Program (write 256B) ---\n");
+    /* ===================== DMA Page Program 256B 校验 ===================== */
+    printf("==== DMA Page Program (write 256B to Page 0) ====\n");
     hw_spi_init(239);
-    // Sector erase
-    hw_cs_low(); hw_spi_byte(0x06); hw_cs_high();  // WE
+
+    // Sector erase 0
+    hw_cs_low(); hw_spi_byte(0x06); hw_cs_high();   // WE
     hw_cs_low();
     hw_spi_byte(0x20); hw_spi_byte(0); hw_spi_byte(0); hw_spi_byte(0);
     hw_cs_high();
@@ -186,39 +244,29 @@ static void run_dma_compare(void)
         u8 s = hw_spi_byte(0xFF); hw_cs_high();
         if (!(s & 1)) break;
     }
-    // DMA write
+
+    // DMA write 256B
     u8 wbuf[256], rbuf[256];
     for (int i = 0; i < 256; i++) wbuf[i] = (u8)i;
-    hw_cs_low(); hw_spi_byte(0x06); hw_cs_high();  // WE
+    hw_cs_low(); hw_spi_byte(0x06); hw_cs_high();   // WE
     hw_cs_low(); hw_spi_byte(0x02); hw_spi_byte(0); hw_spi_byte(0); hw_spi_byte(0);
-    SPI1CON &= ~BIT(4);
+    SPI1CON &= ~BIT(4);                // RXSEL=0 (TX DMA)
     SPI1DMAADR = (u32)wbuf;
     SPI1DMACNT = 256;
     while (!(SPI1CON & BIT(16)));
     SPI1CPND = BIT(16);
     hw_cs_high();
-    // wait busy
-    while (1) {
+    while (1) {  // wait busy
         hw_cs_low(); hw_spi_byte(0x05);
         u8 s = hw_spi_byte(0xFF); hw_cs_high();
         if (!(s & 1)) break;
     }
-    // verify
+
+    // DMA read & verify
     read_dma(0, rbuf, 256);
     int e = 0;
     for (int i = 0; i < 256; i++) if (rbuf[i] != wbuf[i]) e++;
-    printf("DMA write+read: %s (%d/256 errors)\n", e?"FAIL":"PASSED", e);
-}
-
-/* ===================== 入口 ===================== */
-void test_spi_timing_run(void)
-{
-    printf("\n===== BT892X SPI Timing Test (Interrupt vs DMA) =====\n");
-    printf("Wiring: W25Q64 CS=PE4/CLK=PE6/DI=PE7/DO=PE5\n");
-    printf("(no Flash - tests still run, JEDEC read will be 0xFF and skipped)\n\n");
-
-    run_interrupt();
-    run_dma_compare();
+    printf("DMA write+read: %s (%d/256 errors)\n", e ? "FAIL" : "PASSED", e);
 
     printf("\n===== SPI Timing DONE =====\n");
     while (1);

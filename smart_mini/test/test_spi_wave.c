@@ -73,10 +73,11 @@ static void hw_spi_byte(u8 tx)
 }
 
 /* ===================== 子阶段 ===================== */
+__attribute__((unused))
 static void run_soft_waveform(void)
 {
     printf("\n##### Phase 1: Software SPI Waveform #####\n");
-    printf("CS=PE4, CLK=PE6, MOSI=PE7（软件SPI与硬件G4同引脚）\n");
+    printf("CS=PE4, CLK=PE6, MOSI=PE7 (same pins as HW G4)\n");
     printf("LA: CH0=PE6(CLK), CH1=PE7(MOSI)\n");
     printf("Sending 0x55 continuously on PE7...\n\n");
     soft_spi_init();
@@ -93,7 +94,7 @@ static void run_soft_waveform(void)
 static void run_hw_waveform(void)
 {
     printf("\n##### Phase 2: Hardware SPI1 Waveform #####\n");
-    printf("CS=PE4(GPIO), CLK=PE6, MOSI=PE7（硬件SPI1 G4）\n");
+    printf("CS=PE4(GPIO), CLK=PE6, MOSI=PE7 (HW SPI1 G4)\n");
     printf("LA: CH0=PE6(CLK), CH1=PE7(MOSI)\n");
     printf("Sending 0x55 continuously on PE7...\n\n");
     hw_spi_init(239);
