@@ -371,18 +371,57 @@ JEDEC ID 功能验证：C / ASM / 展开 **全 PASS**。
 
 ---
 
+## 10. HAL 重构（浅重构 · 用户决策 2026-07-17）
+
+5 个 `test_spi_*.c` 重复实现相同 SPI/W25Q64/ISR/DMA 代码约 250 行。已抽出 `test/spi_hal.{h,c}` 公共层：
+
+| HAL 函数 | 角色 |
+|---|---|
+| `spi_hal_soft_init/byte` | 软件 bit-bang 原语 |
+| `spi_hal_hw_init/byte` | 硬件 SPI1 阻塞原语 |
+| `spi_hal_cs_low/high` | CS 控制（共享） |
+| `spi_hal_w25_sw_*` × 6 | W25Q64 软件驱动（写使能/读状态/等忙/读/页写/扇区擦） |
+| `spi_hal_w25_hw_*` × 6 | W25Q64 硬件驱动（同上） |
+| `spi_hal_hw_it_setup/teardown/byte_it` | Interrupt 模式三件套 |
+| `spi_hal_hw_read_dma/write_dma` | DMA 模式高层 API |
+
+**重构效果**（每个测试文件行数变化）：
+- test_spi_loop.c：137 → 86 行（-37%）
+- test_spi_wave.c：130 → 89 行（-31%）
+- test_spi_soft_asm.c：173 → 140 行（-19%）
+- test_spi_w25q64.c：~120 行重复 → 全部走 HAL（实验函数保持）
+- test_spi_timing.c：274 → 231 行（-16%）
+
+**总线抽象策略（用户决策）**：浅重构 + soft/hw 双套。W25Q64 驱动保留 `sw_/hw_` 双份（不引运行时多态），未来换芯片时**只需改 `spi_hal.c` 一文件**，测试代码零修改。
+
+**已知现象：性能漂移**（不是 bug，是抽象固有代价）：
+- C 版本速度**慢 ~11%**（内部 `static` → 跨 TU 外部调用，无 LTO 时无法 inline）
+- ASM (`__asm__ volatile`) 速度**不变**（volatile 强制调用点 inline）
+- 含义：之前"几乎相等"，现在"ASM 略快"——**结论反转**
+- 修复：编译器加 `-flto`（见 §11）
+- 详见：[docs/test_spi_hal_refactor.md](test_spi_hal_refactor.md) §5
+
+**后续演进**（用户决策"不实施"）：
+- **中度重构**（§6.1）：把 W25Q64 命令用宏参数化，12 个函数缩到 6 个
+- **深度重构**（§6.2）：bus table + 函数指针，测试代码完全 bus 无关
+- **换芯片**（§7）：当前架构换 BT8925/STM32 只改 `spi_hal.c` (~1-2h)，详见文档路线图
+
+---
+
 ## 附录：关键文件路径
 
 | 文件 | 作用 |
 |---|---|
-| `smart_mini/test/test_spi_common.h` | SPI 共用引脚宏定义（CS=PE4/CLK=PE6/MOSI=PE7/MISO=PE5） |
-| `smart_mini/test/test_spi_loop.c/.h` | Phase 1：跳线回环（软+硬） |
-| `smart_mini/test/test_spi_wave.c/.h` | Phase 2：LA 波形（软+硬） |
-| `smart_mini/test/test_spi_w25q64.c/.h` | Phase 3：W25Q64 软/硬全套 |
-| `smart_mini/test/test_spi_soft_asm.c/.h` | Phase 4：软件 bit-bang C vs ASM 速度对比 |
-| `smart_mini/test/test_spi_timing.c/.h` | Phase 5：polling/INT/DMA 时间对比 |
-| `smart_mini/main.c` | 5 个 SPI 开关 + dispatch（第 55-63 行的 SPI 段） |
-| `smart_mini/app.cbp` | CodeBlocks 工程（注册 5 个 .c + 共用头） |
+| `smart_mini/test/spi_hal.h` | **HAL 接口声明**（pin macros + 5 步骤所有原语声明） |
+| `smart_mini/test/spi_hal.c` | **HAL 实现**（soft/hw 字节级 + W25Q64 驱动 + IT/DMA） |
+| `smart_mini/test/test_spi_loop.c/.h` | Phase 1：跳线回环（软+硬），调 HAL |
+| `smart_mini/test/test_spi_wave.c/.h` | Phase 2：LA 波形（软+硬），调 HAL |
+| `smart_mini/test/test_spi_w25q64.c/.h` | Phase 3：W25Q64 软/硬全套，调 HAL W25 驱动 |
+| `smart_mini/test/test_spi_soft_asm.c/.h` | Phase 4：软件 bit-bang C vs ASM 速度对比，调 HAL soft |
+| `smart_mini/test/test_spi_timing.c/.h` | Phase 5：polling/INT/DMA 时间对比，调 HAL it/dma |
+| `smart_mini/main.c` | 5 个 SPI 开关 + dispatch（第 55-63 行的 SPI 段），**未动** |
+| `smart_mini/app.cbp` | CodeBlocks 工程（注册 5 个 .c + spi_hal.c/.h） |
 | `smart_mini/header/sfr.h` | SPI1 寄存器宏定义第 579-584 行、FUNCMCON1 第 45 行、GPIOE 第 450-462 行 |
 | `docs/BT892X_UserManual_Driver.md` | 手册 §7 SPI（第 455-541 行）、§3.3 FUNCMCON1（第 172-177 行）、§3.2 GPIO（第 134-157 行） |
 | `docs/bt892x_pinfunction.md` | 引脚 §4.3 PORTE（第 121-129 行）、§5.2 SPI1（第 211-212 行） |
+| `docs/test_spi_hal_refactor.md` | **HAL 重构记录**（5 步实施 + 性能漂移 + 中/深重构思路 + 换芯片路线图） |

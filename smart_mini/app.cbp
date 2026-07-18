@@ -53,6 +53,10 @@
 			<Option compiler="riscv32" use="1" buildCommand=" " />
 		</Unit>
 		<Unit filename="reset.S" />
+		<Unit filename="test/spi_hal.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/spi_hal.h" />
 		<Unit filename="test/test_common.h" />
 		<Unit filename="test/test_gpio.c">
 			<Option compilerVar="CC" />
@@ -74,7 +78,6 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_i2c_la.h" />
-		<Unit filename="test/test_spi_common.h" />
 		<Unit filename="test/test_spi_loop.c">
 			<Option compilerVar="CC" />
 		</Unit>
