@@ -4,6 +4,11 @@
 #include "test/test_timer_pwm.h"
 #include "test/test_uart.h"
 #include "test/test_uart_soft.h"
+#include "test/test_spi_loop.h"
+#include "test/test_spi_wave.h"
+#include "test/test_spi_w25q64.h"
+#include "test/test_spi_soft_asm.h"
+#include "test/test_spi_timing.h"
 #include "test/test_i2c.h"
 #include "test/test_i2c_la.h"
 #include "test/test_i2c_gpio.h"
@@ -24,6 +29,11 @@ extern void test_uart2_send_run(void);
 extern void test_uart2_recv_run(void);
 extern void test_uart2_console_run(void);
 extern void test_uart_soft_run(void);
+extern void test_spi_loop_run(void);
+extern void test_spi_wave_run(void);
+extern void test_spi_w25q64_run(void);
+extern void test_spi_soft_asm_run(void);
+extern void test_spi_timing_run(void);
 extern void test_i2c_run(void);
 extern void test_i2c_la_run(void);
 extern void test_i2c_gpio_run(void);
@@ -38,9 +48,18 @@ extern void test_i2c_gpio_la_run(void);
 // ---- UART：软/硬各一份，共用 PB2(TX)/PB1(RX)，一次只开一个 ----
 // #define TEST_UART_EN    1        // 硬件 UART2 回环 (跳线 PB2<->PB1)
 // #define TEST_UART_SEND_EN  1   // 硬件 UART2 持续发送 (PB2->USB-TTL)
- #define TEST_UART_RECV_EN  1   // 硬件 UART2 持续接收 (USB-TTL->PB1)
+// #define TEST_UART_RECV_EN  1   // 硬件 UART2 持续接收 (USB-TTL->PB1)
 // #define TEST_UART_CONSOLE_EN 1  // 硬件 UART2 收发回显 + printf 重定向到 UART2 (PB2/PB1)
 // #define TEST_UART_SOFT_EN  1     // 软件 bit-bang UART 回环 (跳线 PB2<->PB1, 9600 8N1)
+// ---- SPI：软/硬共用 PE4=CS/PE6=CLK/PE7=MOSI/PE5=MISO，一次只开一个 ----
+// ---- SPI：5 个测试，按接法分 3 组（跳线 / LA / W25Q64 Flash），接线互斥 ----
+//       LOOP↔WAVE↔W25Q64↔TIMING 不能同开（共用 PE4/PE5/PE6/PE7）
+//       一次烧一个看现象
+// #define TEST_SPI_LOOP_EN         1  // 跳线接法：软件回环 + 硬件回环（默认；跳线 PE7<->PE5）
+ #define TEST_SPI_WAVE_EN         1  // LA 接法：软件波形 + 硬件波形（PE6/PE7 给 LA）
+// #define TEST_SPI_W25Q64_EN       1  // Flash 接法：软硬 W25Q64 全套（CS=PE4/CLK=PE6/DI=PE7/DO=PE5）
+// #define TEST_SPI_SOFT_ASM_EN     1  // 纯 GPIO：软件 bit-bang C vs ASM 速度对比
+// #define TEST_SPI_TIMING_EN       1  // Flash 接法：polling/INT/DMA 时间对比
 // #define TEST_I2C_EN    1
 // #define TEST_I2C_LA_EN   1
 // #define TEST_I2C_GPIO_EN      1
@@ -261,6 +280,21 @@ int main(void)
 // #ifdef TEST_SPI_EN
 //     test_spi_run();
 // #endif
+#ifdef TEST_SPI_LOOP_EN
+    test_spi_loop_run();
+#endif
+#ifdef TEST_SPI_WAVE_EN
+    test_spi_wave_run();
+#endif
+#ifdef TEST_SPI_W25Q64_EN
+    test_spi_w25q64_run();
+#endif
+#ifdef TEST_SPI_SOFT_ASM_EN
+    test_spi_soft_asm_run();
+#endif
+#ifdef TEST_SPI_TIMING_EN
+    test_spi_timing_run();
+#endif
 #ifdef TEST_I2C_EN
     test_i2c_run();
 #endif

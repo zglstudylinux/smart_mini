@@ -13,6 +13,7 @@
 				<Option compiler="riscv32" />
 				<Compiler>
 					<Add option="-g" />
+					<Add option="-DSPI_SW_W25_EXP=2" />
 				</Compiler>
 			</Target>
 		</Build>
@@ -41,11 +42,59 @@
 		<Unit filename="header/sfr.h" />
 		<Unit filename="header/sys.h" />
 		<Unit filename="header/typedef.h" />
+		<Unit filename="interrupt.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ram.ld">
+			<Option compile="1" />
+			<Option compiler="riscv32" use="1" buildCommand=" " />
+		</Unit>
+		<Unit filename="reset.S" />
 		<Unit filename="test/test_common.h" />
 		<Unit filename="test/test_gpio.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_gpio.h" />
+		<Unit filename="test/test_i2c.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c.h" />
+		<Unit filename="test/test_i2c_gpio.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_gpio.h" />
+		<Unit filename="test/test_i2c_gpio_la.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_gpio_la.h" />
+		<Unit filename="test/test_i2c_la.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_la.h" />
+		<Unit filename="test/test_spi_common.h" />
+		<Unit filename="test/test_spi_loop.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_loop.h" />
+		<Unit filename="test/test_spi_wave.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_wave.h" />
+		<Unit filename="test/test_spi_w25q64.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_w25q64.h" />
+		<Unit filename="test/test_spi_soft_asm.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_soft_asm.h" />
+		<Unit filename="test/test_spi_timing.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_timing.h" />
 		<Unit filename="test/test_timer.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -62,37 +111,7 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_uart_soft.h" />
-		<Unit filename="test/test_i2c.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="test/test_i2c.h" />
-		<Unit filename="test/test_i2c_la.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="test/test_i2c_la.h" />
-		<Unit filename="test/test_i2c_gpio.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="test/test_i2c_gpio.h" />
-		<Unit filename="test/test_i2c_gpio_la.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="test/test_i2c_gpio_la.h" />
-		<Unit filename="interrupt.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="main.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="ram.ld">
-			<Option compile="1" />
-			<Option compiler="riscv32" use="1" buildCommand=" " />
-		</Unit>
-		<Unit filename="reset.S" />
 		<Extensions>
-			<code_completion />
-			<envvars />
-			<debugger />
 			<lib_finder disable_auto="1" />
 		</Extensions>
 	</Project>
