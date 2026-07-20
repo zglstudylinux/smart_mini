@@ -39,6 +39,10 @@
 #define ADKEY_PREV_MAX              117u
 #define ADKEY_NEXT_MAX              120u
 #define ADKEY_NONE_MIN              122u
+#define ADKEY_SCAN_PERIOD_US        5000u
+#define ADKEY_DEBOUNCE_SAMPLES      5u
+
+static volatile u32 g_adkey_scan_tick = 0;
 
 static void test_adkey_raw_init(void)
 {
@@ -194,5 +198,107 @@ void test_adkey_map_run(void)
         }
 
         delay_ms(ADKEY_PRINT_PERIOD_MS);
+    }
+}
+
+AT(.com_text.isr)
+static void test_adkey_timer1_isr(void)
+{
+    TMR1CPND = BIT(9);
+    g_adkey_scan_tick++;
+}
+
+static void test_adkey_timer1_init(void)
+{
+    TMR1CON = 0;
+    PICEN &= ~BIT(IRQ_TMR1_VECTOR);
+
+    register_isr(IRQ_TMR1_VECTOR, test_adkey_timer1_isr);
+    g_adkey_scan_tick = 0;
+
+    TMR1CPND = BIT(9);
+    TMR1CNT = 0;
+    TMR1PR = ADKEY_SCAN_PERIOD_US - 1;
+    TMR1CON = BIT(7);
+    TMR1CON |= BIT(2) | BIT(0);
+
+    PICPR &= ~BIT(IRQ_TMR1_VECTOR);
+    PICEN |= BIT(IRQ_TMR1_VECTOR);
+}
+
+static void test_adkey_emit_transition(u8 old_key, u8 new_key, u32 raw)
+{
+    u16 message;
+
+    if (old_key != KEY_NONE) {
+        message = (u16)(KEY_SHORT_UP | old_key);
+        TEST_LOG("msg=0x%04x KEY_SHORT_UP %s raw=%u",
+                 (u32)message, test_adkey_key_name(old_key), raw);
+    }
+
+    if (new_key != KEY_NONE) {
+        message = (u16)(KEY_SHORT | new_key);
+        TEST_LOG("msg=0x%04x KEY_SHORT %s raw=%u",
+                 (u32)message, test_adkey_key_name(new_key), raw);
+    }
+}
+
+void test_adkey_debounce_run(void)
+{
+    u32 handled_tick;
+    u32 current_tick;
+    u32 raw;
+    u8 sampled_key;
+    u8 candidate_key = KEY_NONE;
+    u8 stable_key = KEY_NONE;
+    u8 same_count = 0;
+
+    TEST_LOG("========================================");
+    TEST_LOG("ADKEY stage 3: 5ms x 5 debounce");
+    TEST_LOG("TMR1 scan period: 5ms; stable count: 5; debounce: 25ms");
+    TEST_LOG("Expected events: KEY_SHORT on stable press, KEY_SHORT_UP on stable release");
+    TEST_LOG("Long press and repeat are NOT implemented in this stage");
+    TEST_LOG("========================================");
+
+    test_adkey_raw_init();
+    test_adkey_timer1_init();
+    handled_tick = g_adkey_scan_tick;
+
+    while (1) {
+        current_tick = g_adkey_scan_tick;
+        if (current_tick == handled_tick) {
+            continue;
+        }
+        handled_tick = current_tick;
+
+        if (!test_adkey_raw_read(&raw)) {
+            TEST_LOG("[TIMEOUT] ADC12 conversion did not finish in %u us",
+                     (u32)SARADC_TIMEOUT_US);
+            continue;
+        }
+
+        sampled_key = test_adkey_map_raw(raw);
+        if (sampled_key == KEY_UNKNOWN) {
+            candidate_key = KEY_UNKNOWN;
+            same_count = 0;
+            continue;
+        }
+
+        if (sampled_key != candidate_key) {
+            candidate_key = sampled_key;
+            same_count = 1;
+            continue;
+        }
+
+        if (same_count < ADKEY_DEBOUNCE_SAMPLES) {
+            same_count++;
+        }
+
+        if ((same_count >= ADKEY_DEBOUNCE_SAMPLES) &&
+            (candidate_key != stable_key)) {
+            u8 old_key = stable_key;
+            stable_key = candidate_key;
+            test_adkey_emit_transition(old_key, stable_key, raw);
+        }
     }
 }

@@ -42,7 +42,7 @@ LOAD Output\obj\test\test_uart_soft.o
  *(.reset)
  .reset         0x0000000010000000       0x54 Output\obj\reset.o
 
-.comm           0x0000000000011000     0x76a4 load address 0x0000000010000200
+.comm           0x0000000000011000     0x79ac load address 0x0000000010000200
  *(.vector)
  .vector        0x0000000000011000      0x138 Output\obj\reset.o
                 0x00000000000110a0                _exception_isr
@@ -65,176 +65,177 @@ LOAD Output\obj\test\test_uart_soft.o
                 0x000000000001120c                delay_ms
                 0x0000000000011224                delay_5ms
  .com_text.isr  0x000000000001123e       0x12 Output\obj\test\spi_hal.o
- .com_text.isr  0x0000000000011250       0x16 Output\obj\test\test_timer.o
+ .com_text.isr  0x0000000000011250       0x16 Output\obj\test\test_adkey.o
+ .com_text.isr  0x0000000000011266       0x16 Output\obj\test\test_timer.o
  *(.com_rodata*)
- *fill*         0x0000000000011266        0x2 
+ *fill*         0x000000000001127c        0x0 
  .com_rodata.exception
-                0x0000000000011268       0x12 Output\obj\main.o
-                0x0000000000011268                str_cpu_error
+                0x000000000001127c       0x12 Output\obj\main.o
+                0x000000000001127c                str_cpu_error
  *(.text*)
- .text          0x000000000001127a       0x46 Output\obj\interrupt.o
-                0x000000000001127a                timer0_init
- .text          0x00000000000112c0      0x190 Output\obj\main.o
-                0x00000000000112c0                timer2_init
-                0x00000000000112dc                sd_disable
-                0x00000000000112f4                usb_disable
-                0x0000000000011318                uart0_mapping_sel
-                0x000000000001138e                set_sys_clk
- .text.startup  0x0000000000011450       0xd6 Output\obj\main.o
-                0x0000000000011450                main
- .text          0x0000000000011526        0x0 Output\obj\reset.o
- .text          0x0000000000011526      0x4e2 Output\obj\test\spi_hal.o
-                0x0000000000011526                spi_hal_soft_init
-                0x0000000000011566                spi_hal_soft_byte
-                0x00000000000115e0                spi_hal_hw_init
-                0x000000000001165e                spi_hal_hw_byte
-                0x0000000000011680                spi_hal_cs_low
-                0x000000000001168a                spi_hal_cs_high
-                0x0000000000011694                spi_hal_w25_sw_write_enable
-                0x00000000000116a4                spi_hal_w25_sw_read_status
-                0x00000000000116c2                spi_hal_w25_sw_wait_busy
-                0x00000000000116da                spi_hal_w25_sw_read_data
-                0x000000000001172c                spi_hal_w25_sw_page_program
-                0x000000000001177c                spi_hal_w25_sw_sector_erase
-                0x00000000000117b2                spi_hal_w25_hw_write_enable
-                0x00000000000117c2                spi_hal_w25_hw_read_status
-                0x00000000000117e0                spi_hal_w25_hw_wait_busy
-                0x00000000000117f8                spi_hal_w25_hw_read_data
-                0x000000000001184a                spi_hal_w25_hw_page_program
-                0x000000000001189a                spi_hal_w25_hw_sector_erase
-                0x00000000000118d0                spi_hal_hw_it_setup
-                0x0000000000011902                spi_hal_hw_it_teardown
-                0x0000000000011922                spi_hal_hw_byte_it
-                0x000000000001193e                spi_hal_hw_read_dma
-                0x00000000000119aa                spi_hal_hw_write_dma
- .text          0x0000000000011a08      0x292 Output\obj\test\test_adkey.o
-                0x0000000000011af0                test_adkey_raw_run
-                0x0000000000011bcc                test_adkey_map_run
- .text          0x0000000000011c9a      0x4d4 Output\obj\test\test_gpio.o
-                0x0000000000011c9a                test_gpio_run
- .text          0x000000000001216e      0x4d4 Output\obj\test\test_i2c.o
-                0x000000000001230a                test_i2c_run
- .text          0x0000000000012642      0x69e Output\obj\test\test_i2c_gpio.o
-                0x00000000000129bc                test_i2c_gpio_run
- .text          0x0000000000012ce0      0x326 Output\obj\test\test_i2c_gpio_la.o
-                0x0000000000012e72                test_i2c_gpio_la_run
- .text          0x0000000000013006      0x25c Output\obj\test\test_i2c_la.o
-                0x00000000000130c6                test_i2c_la_run
- .text          0x0000000000013262      0x164 Output\obj\test\test_spi_loop.o
-                0x0000000000013262                test_spi_loop_run
- .text          0x00000000000133c6      0x5d0 Output\obj\test\test_spi_soft_asm.o
-                0x0000000000013748                test_spi_soft_asm_run
- .text          0x0000000000013996      0x544 Output\obj\test\test_spi_timing.o
-                0x00000000000139be                test_spi_timing_run
- .text          0x0000000000013eda      0xfc2 Output\obj\test\test_spi_w25q64.o
-                0x000000000001426e                test_spi_w25q64_run
- .text          0x0000000000014e9c       0x90 Output\obj\test\test_spi_wave.o
-                0x0000000000014e9c                test_spi_wave_run
- .text          0x0000000000014f2c      0x1c8 Output\obj\test\test_timer.o
-                0x0000000000014f92                test_timer_run
- .text          0x00000000000150f4      0x14c Output\obj\test\test_timer_pwm.o
-                0x00000000000150f4                test_timer_pwm_run
- .text          0x0000000000015240      0x3b2 Output\obj\test\test_uart.o
-                0x0000000000015310                test_uart_run
-                0x00000000000153d4                test_uart2_send_run
-                0x00000000000154ce                test_uart2_recv_run
-                0x0000000000015578                uart2_console_init
-                0x000000000001558e                test_uart2_console_run
- .text          0x00000000000155f2      0x1c0 Output\obj\test\test_uart_soft.o
-                0x0000000000015684                test_uart_soft_run
+ .text          0x000000000001128e       0x46 Output\obj\interrupt.o
+                0x000000000001128e                timer0_init
+ .text          0x00000000000112d4      0x190 Output\obj\main.o
+                0x00000000000112d4                timer2_init
+                0x00000000000112f0                sd_disable
+                0x0000000000011308                usb_disable
+                0x000000000001132c                uart0_mapping_sel
+                0x00000000000113a2                set_sys_clk
+ .text.startup  0x0000000000011464       0xd6 Output\obj\main.o
+                0x0000000000011464                main
+ .text          0x000000000001153a        0x0 Output\obj\reset.o
+ .text          0x000000000001153a      0x4e2 Output\obj\test\spi_hal.o
+                0x000000000001153a                spi_hal_soft_init
+                0x000000000001157a                spi_hal_soft_byte
+                0x00000000000115f4                spi_hal_hw_init
+                0x0000000000011672                spi_hal_hw_byte
+                0x0000000000011694                spi_hal_cs_low
+                0x000000000001169e                spi_hal_cs_high
+                0x00000000000116a8                spi_hal_w25_sw_write_enable
+                0x00000000000116b8                spi_hal_w25_sw_read_status
+                0x00000000000116d6                spi_hal_w25_sw_wait_busy
+                0x00000000000116ee                spi_hal_w25_sw_read_data
+                0x0000000000011740                spi_hal_w25_sw_page_program
+                0x0000000000011790                spi_hal_w25_sw_sector_erase
+                0x00000000000117c6                spi_hal_w25_hw_write_enable
+                0x00000000000117d6                spi_hal_w25_hw_read_status
+                0x00000000000117f4                spi_hal_w25_hw_wait_busy
+                0x000000000001180c                spi_hal_w25_hw_read_data
+                0x000000000001185e                spi_hal_w25_hw_page_program
+                0x00000000000118ae                spi_hal_w25_hw_sector_erase
+                0x00000000000118e4                spi_hal_hw_it_setup
+                0x0000000000011916                spi_hal_hw_it_teardown
+                0x0000000000011936                spi_hal_hw_byte_it
+                0x0000000000011952                spi_hal_hw_read_dma
+                0x00000000000119be                spi_hal_hw_write_dma
+ .text          0x0000000000011a1c      0x438 Output\obj\test\test_adkey.o
+                0x0000000000011b04                test_adkey_raw_run
+                0x0000000000011be0                test_adkey_map_run
+                0x0000000000011cae                test_adkey_debounce_run
+ .text          0x0000000000011e54      0x4d4 Output\obj\test\test_gpio.o
+                0x0000000000011e54                test_gpio_run
+ .text          0x0000000000012328      0x4d4 Output\obj\test\test_i2c.o
+                0x00000000000124c4                test_i2c_run
+ .text          0x00000000000127fc      0x69e Output\obj\test\test_i2c_gpio.o
+                0x0000000000012b76                test_i2c_gpio_run
+ .text          0x0000000000012e9a      0x326 Output\obj\test\test_i2c_gpio_la.o
+                0x000000000001302c                test_i2c_gpio_la_run
+ .text          0x00000000000131c0      0x25c Output\obj\test\test_i2c_la.o
+                0x0000000000013280                test_i2c_la_run
+ .text          0x000000000001341c      0x164 Output\obj\test\test_spi_loop.o
+                0x000000000001341c                test_spi_loop_run
+ .text          0x0000000000013580      0x5d0 Output\obj\test\test_spi_soft_asm.o
+                0x0000000000013902                test_spi_soft_asm_run
+ .text          0x0000000000013b50      0x544 Output\obj\test\test_spi_timing.o
+                0x0000000000013b78                test_spi_timing_run
+ .text          0x0000000000014094      0xfc2 Output\obj\test\test_spi_w25q64.o
+                0x0000000000014428                test_spi_w25q64_run
+ .text          0x0000000000015056       0x90 Output\obj\test\test_spi_wave.o
+                0x0000000000015056                test_spi_wave_run
+ .text          0x00000000000150e6      0x1c8 Output\obj\test\test_timer.o
+                0x000000000001514c                test_timer_run
+ .text          0x00000000000152ae      0x14c Output\obj\test\test_timer_pwm.o
+                0x00000000000152ae                test_timer_pwm_run
+ .text          0x00000000000153fa      0x3b2 Output\obj\test\test_uart.o
+                0x00000000000154ca                test_uart_run
+                0x000000000001558e                test_uart2_send_run
+                0x0000000000015688                test_uart2_recv_run
+                0x0000000000015732                uart2_console_init
+                0x0000000000015748                test_uart2_console_run
+ .text          0x00000000000157ac      0x1c0 Output\obj\test\test_uart_soft.o
+                0x000000000001583e                test_uart_soft_run
  *(.rodata*)
- *fill*         0x00000000000157b2        0x2 
  .rodata.str1.4
-                0x00000000000157b4       0x1c Output\obj\main.o
- .rodata        0x00000000000157d0       0x10 Output\obj\test\test_adkey.o
+                0x000000000001596c       0x1c Output\obj\main.o
+ .rodata        0x0000000000015988       0x10 Output\obj\test\test_adkey.o
  .rodata.str1.4
-                0x00000000000157e0      0x2d9 Output\obj\test\test_adkey.o
- *fill*         0x0000000000015ab9        0x3 
+                0x0000000000015998      0x429 Output\obj\test\test_adkey.o
+ *fill*         0x0000000000015dc1        0x3 
  .rodata.str1.4
-                0x0000000000015abc      0x226 Output\obj\test\test_gpio.o
+                0x0000000000015dc4      0x226 Output\obj\test\test_gpio.o
                                         0x25a (size before relaxing)
- *fill*         0x0000000000015ce2        0x2 
+ *fill*         0x0000000000015fea        0x2 
  .rodata.str1.4
-                0x0000000000015ce4      0x386 Output\obj\test\test_i2c.o
+                0x0000000000015fec      0x386 Output\obj\test\test_i2c.o
                                         0x3ba (size before relaxing)
- *fill*         0x000000000001606a        0x2 
+ *fill*         0x0000000000016372        0x2 
  .rodata.str1.4
-                0x000000000001606c       0x80 Output\obj\test\test_i2c_gpio.o
+                0x0000000000016374       0x80 Output\obj\test\test_i2c_gpio.o
                                         0x3c4 (size before relaxing)
  .rodata.str1.4
-                0x00000000000160ec      0x2aa Output\obj\test\test_i2c_gpio_la.o
+                0x00000000000163f4      0x2aa Output\obj\test\test_i2c_gpio_la.o
                                         0x2ea (size before relaxing)
- *fill*         0x0000000000016396        0x2 
+ *fill*         0x000000000001669e        0x2 
  .rodata.str1.4
-                0x0000000000016398      0x2d7 Output\obj\test\test_i2c_la.o
+                0x00000000000166a0      0x2d7 Output\obj\test\test_i2c_la.o
                                         0x36b (size before relaxing)
- *fill*         0x000000000001666f        0x1 
+ *fill*         0x0000000000016977        0x1 
  .rodata.str1.4
-                0x0000000000016670      0x22f Output\obj\test\test_spi_loop.o
+                0x0000000000016978      0x22f Output\obj\test\test_spi_loop.o
                                         0x237 (size before relaxing)
- *fill*         0x000000000001689f        0x1 
+ *fill*         0x0000000000016ba7        0x1 
  .rodata.str1.4
-                0x00000000000168a0      0x400 Output\obj\test\test_spi_soft_asm.o
+                0x0000000000016ba8      0x400 Output\obj\test\test_spi_soft_asm.o
  .rodata.str1.4
-                0x0000000000016ca0      0x374 Output\obj\test\test_spi_timing.o
+                0x0000000000016fa8      0x374 Output\obj\test\test_spi_timing.o
                                         0x388 (size before relaxing)
  .rodata.str1.4
-                0x0000000000017014      0xc6f Output\obj\test\test_spi_w25q64.o
+                0x000000000001731c      0xc6f Output\obj\test\test_spi_w25q64.o
                                         0xc97 (size before relaxing)
- *fill*         0x0000000000017c83        0x1 
+ *fill*         0x0000000000017f8b        0x1 
  .rodata.str1.4
-                0x0000000000017c84      0x12e Output\obj\test\test_spi_wave.o
- *fill*         0x0000000000017db2        0x2 
+                0x0000000000017f8c      0x12e Output\obj\test\test_spi_wave.o
+ *fill*         0x00000000000180ba        0x2 
  .rodata.str1.4
-                0x0000000000017db4      0x20d Output\obj\test\test_timer.o
+                0x00000000000180bc      0x20d Output\obj\test\test_timer.o
                                         0x241 (size before relaxing)
- *fill*         0x0000000000017fc1        0x3 
+ *fill*         0x00000000000182c9        0x3 
  .rodata.str1.4
-                0x0000000000017fc4      0x258 Output\obj\test\test_timer_pwm.o
+                0x00000000000182cc      0x258 Output\obj\test\test_timer_pwm.o
                                         0x25c (size before relaxing)
  .rodata.str1.4
-                0x000000000001821c      0x351 Output\obj\test\test_uart.o
- *fill*         0x000000000001856d        0x3 
+                0x0000000000018524      0x351 Output\obj\test\test_uart.o
+ *fill*         0x0000000000018875        0x3 
  .rodata.str1.4
-                0x0000000000018570      0x128 Output\obj\test\test_uart_soft.o
+                0x0000000000018878      0x128 Output\obj\test\test_uart_soft.o
                                         0x150 (size before relaxing)
  *(.srodata*)
  *(.rela*)
  .rela.com_text.exception
-                0x0000000000018698        0x0 Output\obj\interrupt.o
+                0x00000000000189a0        0x0 Output\obj\interrupt.o
  .rela.text.startup
-                0x0000000000018698        0x0 Output\obj\interrupt.o
- .rela.reset    0x0000000000018698        0x0 Output\obj\interrupt.o
+                0x00000000000189a0        0x0 Output\obj\interrupt.o
+ .rela.reset    0x00000000000189a0        0x0 Output\obj\interrupt.o
  *(.data*)
- .data          0x0000000000018698        0x0 Output\obj\interrupt.o
- .data          0x0000000000018698        0x0 Output\obj\main.o
- .data          0x0000000000018698        0x0 Output\obj\reset.o
- .data          0x0000000000018698        0x0 Output\obj\test\spi_hal.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_adkey.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_gpio.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_i2c.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_i2c_gpio.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_i2c_gpio_la.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_i2c_la.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_spi_loop.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_spi_soft_asm.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_spi_timing.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_spi_w25q64.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_spi_wave.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_timer.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_timer_pwm.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_uart.o
- .data          0x0000000000018698        0x0 Output\obj\test\test_uart_soft.o
+ .data          0x00000000000189a0        0x0 Output\obj\interrupt.o
+ .data          0x00000000000189a0        0x0 Output\obj\main.o
+ .data          0x00000000000189a0        0x0 Output\obj\reset.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\spi_hal.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_adkey.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_gpio.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_i2c.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_i2c_gpio.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_i2c_gpio_la.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_i2c_la.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_spi_loop.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_spi_soft_asm.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_spi_timing.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_spi_w25q64.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_spi_wave.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_timer.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_timer_pwm.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_uart.o
+ .data          0x00000000000189a0        0x0 Output\obj\test\test_uart_soft.o
  *(.sdata*)
- .sdata         0x0000000000018698        0x4 Output\obj\test\test_i2c.o
- .sdata         0x000000000001869c        0x4 Output\obj\test\test_i2c_gpio.o
-                0x00000000000186a0        0x4 LONG 0x0
+ .sdata         0x00000000000189a0        0x4 Output\obj\test\test_i2c.o
+ .sdata         0x00000000000189a4        0x4 Output\obj\test\test_i2c_gpio.o
+                0x00000000000189a8        0x4 LONG 0x0
 
-.flash          0x00000000100078a4      0x15c
-                0x0000000010007a00                . = ALIGN (0x200)
- *fill*         0x00000000100078a4      0x15c 
+.flash          0x0000000010007bac       0x54
+                0x0000000010007c00                . = ALIGN (0x200)
+ *fill*         0x0000000010007bac       0x54 
 
-.bss            0x0000000000019000       0x84
+.bss            0x0000000000019000       0x88
                 0x0000000000019000                __bss_start = .
  *(.bss)
  .bss           0x0000000000019000        0x0 Output\obj\interrupt.o
@@ -259,12 +260,13 @@ LOAD Output\obj\test\test_uart_soft.o
  *(.sbss)
  .sbss          0x0000000000019000        0x4 Output\obj\interrupt.o
  .sbss          0x0000000000019004        0x4 Output\obj\test\spi_hal.o
- .sbss          0x0000000000019008        0x4 Output\obj\test\test_timer.o
+ .sbss          0x0000000000019008        0x4 Output\obj\test\test_adkey.o
+ .sbss          0x000000000001900c        0x4 Output\obj\test\test_timer.o
  *(.buf*)
- .buf.irq_tbl   0x000000000001900c       0x78 Output\obj\interrupt.o
-                0x000000000001900c                tbl_irq_vector
-                0x0000000000019084                __bss_end = .
-                0x0000000000000084                __bss_size = (__bss_end - __bss_start)
+ .buf.irq_tbl   0x0000000000019010       0x78 Output\obj\interrupt.o
+                0x0000000000019010                tbl_irq_vector
+                0x0000000000019088                __bss_end = .
+                0x0000000000000088                __bss_size = (__bss_end - __bss_start)
 
 .stack          0x000000000001e000     0x2000
                 0x000000000001e000                __irq_stack_start = .
@@ -277,92 +279,92 @@ LOAD Output\obj\test\test_uart_soft.o
                 0x0000000000050000                __aram_start = .
 
 .code_decram
-                0x000000000000015c                __bank_size = SIZEOF (.flash)
+                0x0000000000000054                __bank_size = SIZEOF (.flash)
                 0x0000000010000200                __comm_lma = LOADADDR (.comm)
-                0x00000000000076a4                __comm_size = SIZEOF (.comm)
+                0x00000000000079ac                __comm_size = SIZEOF (.comm)
 OUTPUT(Output\bin\app.rv32 elf32-littleriscv)
 
-.debug_frame    0x0000000000000000     0x1170
+.debug_frame    0x0000000000000000     0x11bc
  .debug_frame   0x0000000000000000       0x88 Output\obj\interrupt.o
  .debug_frame   0x0000000000000088      0x108 Output\obj\main.o
  .debug_frame   0x0000000000000190      0x450 Output\obj\test\spi_hal.o
- .debug_frame   0x00000000000005e0       0xd4 Output\obj\test\test_adkey.o
- .debug_frame   0x00000000000006b4       0x48 Output\obj\test\test_gpio.o
- .debug_frame   0x00000000000006fc      0x110 Output\obj\test\test_i2c.o
- .debug_frame   0x000000000000080c      0x234 Output\obj\test\test_i2c_gpio.o
- .debug_frame   0x0000000000000a40       0xb4 Output\obj\test\test_i2c_gpio_la.o
- .debug_frame   0x0000000000000af4       0x64 Output\obj\test\test_i2c_la.o
- .debug_frame   0x0000000000000b58       0x3c Output\obj\test\test_spi_loop.o
- .debug_frame   0x0000000000000b94      0x170 Output\obj\test\test_spi_soft_asm.o
- .debug_frame   0x0000000000000d04       0x54 Output\obj\test\test_spi_timing.o
- .debug_frame   0x0000000000000d58      0x140 Output\obj\test\test_spi_w25q64.o
- .debug_frame   0x0000000000000e98       0x34 Output\obj\test\test_spi_wave.o
- .debug_frame   0x0000000000000ecc       0x78 Output\obj\test\test_timer.o
- .debug_frame   0x0000000000000f44       0x34 Output\obj\test\test_timer_pwm.o
- .debug_frame   0x0000000000000f78      0x150 Output\obj\test\test_uart.o
- .debug_frame   0x00000000000010c8       0xa8 Output\obj\test\test_uart_soft.o
+ .debug_frame   0x00000000000005e0      0x120 Output\obj\test\test_adkey.o
+ .debug_frame   0x0000000000000700       0x48 Output\obj\test\test_gpio.o
+ .debug_frame   0x0000000000000748      0x110 Output\obj\test\test_i2c.o
+ .debug_frame   0x0000000000000858      0x234 Output\obj\test\test_i2c_gpio.o
+ .debug_frame   0x0000000000000a8c       0xb4 Output\obj\test\test_i2c_gpio_la.o
+ .debug_frame   0x0000000000000b40       0x64 Output\obj\test\test_i2c_la.o
+ .debug_frame   0x0000000000000ba4       0x3c Output\obj\test\test_spi_loop.o
+ .debug_frame   0x0000000000000be0      0x170 Output\obj\test\test_spi_soft_asm.o
+ .debug_frame   0x0000000000000d50       0x54 Output\obj\test\test_spi_timing.o
+ .debug_frame   0x0000000000000da4      0x140 Output\obj\test\test_spi_w25q64.o
+ .debug_frame   0x0000000000000ee4       0x34 Output\obj\test\test_spi_wave.o
+ .debug_frame   0x0000000000000f18       0x78 Output\obj\test\test_timer.o
+ .debug_frame   0x0000000000000f90       0x34 Output\obj\test\test_timer_pwm.o
+ .debug_frame   0x0000000000000fc4      0x150 Output\obj\test\test_uart.o
+ .debug_frame   0x0000000000001114       0xa8 Output\obj\test\test_uart_soft.o
 
-.debug_info     0x0000000000000000    0x11733
+.debug_info     0x0000000000000000    0x119f0
  .debug_info    0x0000000000000000      0x9d9 Output\obj\interrupt.o
  .debug_info    0x00000000000009d9      0xccc Output\obj\main.o
  .debug_info    0x00000000000016a5       0x87 Output\obj\reset.o
  .debug_info    0x000000000000172c     0x1269 Output\obj\test\spi_hal.o
- .debug_info    0x0000000000002995      0xc70 Output\obj\test\test_adkey.o
- .debug_info    0x0000000000003605      0xe72 Output\obj\test\test_gpio.o
- .debug_info    0x0000000000004477     0x1084 Output\obj\test\test_i2c.o
- .debug_info    0x00000000000054fb     0x12c5 Output\obj\test\test_i2c_gpio.o
- .debug_info    0x00000000000067c0      0xcbb Output\obj\test\test_i2c_gpio_la.o
- .debug_info    0x000000000000747b      0xc71 Output\obj\test\test_i2c_la.o
- .debug_info    0x00000000000080ec      0xbbd Output\obj\test\test_spi_loop.o
- .debug_info    0x0000000000008ca9     0x104d Output\obj\test\test_spi_soft_asm.o
- .debug_info    0x0000000000009cf6     0x12b1 Output\obj\test\test_spi_timing.o
- .debug_info    0x000000000000afa7     0x2d72 Output\obj\test\test_spi_w25q64.o
- .debug_info    0x000000000000dd19      0xa2c Output\obj\test\test_spi_wave.o
- .debug_info    0x000000000000e745      0xba2 Output\obj\test\test_timer.o
- .debug_info    0x000000000000f2e7      0xa72 Output\obj\test\test_timer_pwm.o
- .debug_info    0x000000000000fd59      0xeb0 Output\obj\test\test_uart.o
- .debug_info    0x0000000000010c09      0xb2a Output\obj\test\test_uart_soft.o
+ .debug_info    0x0000000000002995      0xf2d Output\obj\test\test_adkey.o
+ .debug_info    0x00000000000038c2      0xe72 Output\obj\test\test_gpio.o
+ .debug_info    0x0000000000004734     0x1084 Output\obj\test\test_i2c.o
+ .debug_info    0x00000000000057b8     0x12c5 Output\obj\test\test_i2c_gpio.o
+ .debug_info    0x0000000000006a7d      0xcbb Output\obj\test\test_i2c_gpio_la.o
+ .debug_info    0x0000000000007738      0xc71 Output\obj\test\test_i2c_la.o
+ .debug_info    0x00000000000083a9      0xbbd Output\obj\test\test_spi_loop.o
+ .debug_info    0x0000000000008f66     0x104d Output\obj\test\test_spi_soft_asm.o
+ .debug_info    0x0000000000009fb3     0x12b1 Output\obj\test\test_spi_timing.o
+ .debug_info    0x000000000000b264     0x2d72 Output\obj\test\test_spi_w25q64.o
+ .debug_info    0x000000000000dfd6      0xa2c Output\obj\test\test_spi_wave.o
+ .debug_info    0x000000000000ea02      0xba2 Output\obj\test\test_timer.o
+ .debug_info    0x000000000000f5a4      0xa72 Output\obj\test\test_timer_pwm.o
+ .debug_info    0x0000000000010016      0xeb0 Output\obj\test\test_uart.o
+ .debug_info    0x0000000000010ec6      0xb2a Output\obj\test\test_uart_soft.o
 
-.debug_abbrev   0x0000000000000000     0x2fcc
+.debug_abbrev   0x0000000000000000     0x3064
  .debug_abbrev  0x0000000000000000      0x281 Output\obj\interrupt.o
  .debug_abbrev  0x0000000000000281      0x31e Output\obj\main.o
  .debug_abbrev  0x000000000000059f       0x12 Output\obj\reset.o
  .debug_abbrev  0x00000000000005b1      0x359 Output\obj\test\spi_hal.o
- .debug_abbrev  0x000000000000090a      0x291 Output\obj\test\test_adkey.o
- .debug_abbrev  0x0000000000000b9b      0x209 Output\obj\test\test_gpio.o
- .debug_abbrev  0x0000000000000da4      0x342 Output\obj\test\test_i2c.o
- .debug_abbrev  0x00000000000010e6      0x335 Output\obj\test\test_i2c_gpio.o
- .debug_abbrev  0x000000000000141b      0x244 Output\obj\test\test_i2c_gpio_la.o
- .debug_abbrev  0x000000000000165f      0x2b3 Output\obj\test\test_i2c_la.o
- .debug_abbrev  0x0000000000001912      0x24d Output\obj\test\test_spi_loop.o
- .debug_abbrev  0x0000000000001b5f      0x289 Output\obj\test\test_spi_soft_asm.o
- .debug_abbrev  0x0000000000001de8      0x2cd Output\obj\test\test_spi_timing.o
- .debug_abbrev  0x00000000000020b5      0x341 Output\obj\test\test_spi_w25q64.o
- .debug_abbrev  0x00000000000023f6      0x200 Output\obj\test\test_spi_wave.o
- .debug_abbrev  0x00000000000025f6      0x2c0 Output\obj\test\test_timer.o
- .debug_abbrev  0x00000000000028b6      0x1f1 Output\obj\test\test_timer_pwm.o
- .debug_abbrev  0x0000000000002aa7      0x2c3 Output\obj\test\test_uart.o
- .debug_abbrev  0x0000000000002d6a      0x262 Output\obj\test\test_uart_soft.o
+ .debug_abbrev  0x000000000000090a      0x329 Output\obj\test\test_adkey.o
+ .debug_abbrev  0x0000000000000c33      0x209 Output\obj\test\test_gpio.o
+ .debug_abbrev  0x0000000000000e3c      0x342 Output\obj\test\test_i2c.o
+ .debug_abbrev  0x000000000000117e      0x335 Output\obj\test\test_i2c_gpio.o
+ .debug_abbrev  0x00000000000014b3      0x244 Output\obj\test\test_i2c_gpio_la.o
+ .debug_abbrev  0x00000000000016f7      0x2b3 Output\obj\test\test_i2c_la.o
+ .debug_abbrev  0x00000000000019aa      0x24d Output\obj\test\test_spi_loop.o
+ .debug_abbrev  0x0000000000001bf7      0x289 Output\obj\test\test_spi_soft_asm.o
+ .debug_abbrev  0x0000000000001e80      0x2cd Output\obj\test\test_spi_timing.o
+ .debug_abbrev  0x000000000000214d      0x341 Output\obj\test\test_spi_w25q64.o
+ .debug_abbrev  0x000000000000248e      0x200 Output\obj\test\test_spi_wave.o
+ .debug_abbrev  0x000000000000268e      0x2c0 Output\obj\test\test_timer.o
+ .debug_abbrev  0x000000000000294e      0x1f1 Output\obj\test\test_timer_pwm.o
+ .debug_abbrev  0x0000000000002b3f      0x2c3 Output\obj\test\test_uart.o
+ .debug_abbrev  0x0000000000002e02      0x262 Output\obj\test\test_uart_soft.o
 
-.debug_loc      0x0000000000000000     0x2a94
+.debug_loc      0x0000000000000000     0x2c31
  .debug_loc     0x0000000000000000       0x7f Output\obj\interrupt.o
  .debug_loc     0x000000000000007f      0x1a9 Output\obj\main.o
  .debug_loc     0x0000000000000228      0x640 Output\obj\test\spi_hal.o
- .debug_loc     0x0000000000000868      0x138 Output\obj\test\test_adkey.o
- .debug_loc     0x00000000000009a0      0x23a Output\obj\test\test_gpio.o
- .debug_loc     0x0000000000000bda      0x396 Output\obj\test\test_i2c.o
- .debug_loc     0x0000000000000f70      0x404 Output\obj\test\test_i2c_gpio.o
- .debug_loc     0x0000000000001374       0x93 Output\obj\test\test_i2c_gpio_la.o
- .debug_loc     0x0000000000001407       0xdc Output\obj\test\test_i2c_la.o
- .debug_loc     0x00000000000014e3      0x104 Output\obj\test\test_spi_loop.o
- .debug_loc     0x00000000000015e7      0x360 Output\obj\test\test_spi_soft_asm.o
- .debug_loc     0x0000000000001947      0x31b Output\obj\test\test_spi_timing.o
- .debug_loc     0x0000000000001c62      0x9da Output\obj\test\test_spi_w25q64.o
- .debug_loc     0x000000000000263c      0x174 Output\obj\test\test_timer.o
- .debug_loc     0x00000000000027b0      0x16d Output\obj\test\test_uart.o
- .debug_loc     0x000000000000291d      0x177 Output\obj\test\test_uart_soft.o
+ .debug_loc     0x0000000000000868      0x2d5 Output\obj\test\test_adkey.o
+ .debug_loc     0x0000000000000b3d      0x23a Output\obj\test\test_gpio.o
+ .debug_loc     0x0000000000000d77      0x396 Output\obj\test\test_i2c.o
+ .debug_loc     0x000000000000110d      0x404 Output\obj\test\test_i2c_gpio.o
+ .debug_loc     0x0000000000001511       0x93 Output\obj\test\test_i2c_gpio_la.o
+ .debug_loc     0x00000000000015a4       0xdc Output\obj\test\test_i2c_la.o
+ .debug_loc     0x0000000000001680      0x104 Output\obj\test\test_spi_loop.o
+ .debug_loc     0x0000000000001784      0x360 Output\obj\test\test_spi_soft_asm.o
+ .debug_loc     0x0000000000001ae4      0x31b Output\obj\test\test_spi_timing.o
+ .debug_loc     0x0000000000001dff      0x9da Output\obj\test\test_spi_w25q64.o
+ .debug_loc     0x00000000000027d9      0x174 Output\obj\test\test_timer.o
+ .debug_loc     0x000000000000294d      0x16d Output\obj\test\test_uart.o
+ .debug_loc     0x0000000000002aba      0x177 Output\obj\test\test_uart_soft.o
 
-.debug_aranges  0x0000000000000000      0x2d0
+.debug_aranges  0x0000000000000000      0x2d8
  .debug_aranges
                 0x0000000000000000       0x38 Output\obj\interrupt.o
  .debug_aranges
@@ -372,112 +374,112 @@ OUTPUT(Output\bin\app.rv32 elf32-littleriscv)
  .debug_aranges
                 0x00000000000000c0       0x28 Output\obj\test\spi_hal.o
  .debug_aranges
-                0x00000000000000e8       0x20 Output\obj\test\test_adkey.o
+                0x00000000000000e8       0x28 Output\obj\test\test_adkey.o
  .debug_aranges
-                0x0000000000000108       0x20 Output\obj\test\test_gpio.o
+                0x0000000000000110       0x20 Output\obj\test\test_gpio.o
  .debug_aranges
-                0x0000000000000128       0x20 Output\obj\test\test_i2c.o
+                0x0000000000000130       0x20 Output\obj\test\test_i2c.o
  .debug_aranges
-                0x0000000000000148       0x20 Output\obj\test\test_i2c_gpio.o
+                0x0000000000000150       0x20 Output\obj\test\test_i2c_gpio.o
  .debug_aranges
-                0x0000000000000168       0x20 Output\obj\test\test_i2c_gpio_la.o
+                0x0000000000000170       0x20 Output\obj\test\test_i2c_gpio_la.o
  .debug_aranges
-                0x0000000000000188       0x20 Output\obj\test\test_i2c_la.o
+                0x0000000000000190       0x20 Output\obj\test\test_i2c_la.o
  .debug_aranges
-                0x00000000000001a8       0x20 Output\obj\test\test_spi_loop.o
+                0x00000000000001b0       0x20 Output\obj\test\test_spi_loop.o
  .debug_aranges
-                0x00000000000001c8       0x20 Output\obj\test\test_spi_soft_asm.o
+                0x00000000000001d0       0x20 Output\obj\test\test_spi_soft_asm.o
  .debug_aranges
-                0x00000000000001e8       0x20 Output\obj\test\test_spi_timing.o
+                0x00000000000001f0       0x20 Output\obj\test\test_spi_timing.o
  .debug_aranges
-                0x0000000000000208       0x20 Output\obj\test\test_spi_w25q64.o
+                0x0000000000000210       0x20 Output\obj\test\test_spi_w25q64.o
  .debug_aranges
-                0x0000000000000228       0x20 Output\obj\test\test_spi_wave.o
+                0x0000000000000230       0x20 Output\obj\test\test_spi_wave.o
  .debug_aranges
-                0x0000000000000248       0x28 Output\obj\test\test_timer.o
+                0x0000000000000250       0x28 Output\obj\test\test_timer.o
  .debug_aranges
-                0x0000000000000270       0x20 Output\obj\test\test_timer_pwm.o
+                0x0000000000000278       0x20 Output\obj\test\test_timer_pwm.o
  .debug_aranges
-                0x0000000000000290       0x20 Output\obj\test\test_uart.o
+                0x0000000000000298       0x20 Output\obj\test\test_uart.o
  .debug_aranges
-                0x00000000000002b0       0x20 Output\obj\test\test_uart_soft.o
+                0x00000000000002b8       0x20 Output\obj\test\test_uart_soft.o
 
-.debug_ranges   0x0000000000000000      0x8d0
+.debug_ranges   0x0000000000000000      0x990
  .debug_ranges  0x0000000000000000       0x40 Output\obj\interrupt.o
  .debug_ranges  0x0000000000000040       0x50 Output\obj\main.o
  .debug_ranges  0x0000000000000090       0x20 Output\obj\reset.o
  .debug_ranges  0x00000000000000b0       0x98 Output\obj\test\spi_hal.o
- .debug_ranges  0x0000000000000148       0x20 Output\obj\test\test_adkey.o
- .debug_ranges  0x0000000000000168      0x148 Output\obj\test\test_gpio.o
- .debug_ranges  0x00000000000002b0       0xc0 Output\obj\test\test_i2c.o
- .debug_ranges  0x0000000000000370       0xc0 Output\obj\test\test_i2c_gpio.o
- .debug_ranges  0x0000000000000430       0x68 Output\obj\test\test_i2c_gpio_la.o
- .debug_ranges  0x0000000000000498       0x50 Output\obj\test\test_i2c_la.o
- .debug_ranges  0x00000000000004e8       0x60 Output\obj\test\test_spi_loop.o
- .debug_ranges  0x0000000000000548       0x50 Output\obj\test\test_spi_soft_asm.o
- .debug_ranges  0x0000000000000598       0x90 Output\obj\test\test_spi_timing.o
- .debug_ranges  0x0000000000000628      0x150 Output\obj\test\test_spi_w25q64.o
- .debug_ranges  0x0000000000000778       0x58 Output\obj\test\test_timer.o
- .debug_ranges  0x00000000000007d0       0x78 Output\obj\test\test_uart.o
- .debug_ranges  0x0000000000000848       0x88 Output\obj\test\test_uart_soft.o
+ .debug_ranges  0x0000000000000148       0xe0 Output\obj\test\test_adkey.o
+ .debug_ranges  0x0000000000000228      0x148 Output\obj\test\test_gpio.o
+ .debug_ranges  0x0000000000000370       0xc0 Output\obj\test\test_i2c.o
+ .debug_ranges  0x0000000000000430       0xc0 Output\obj\test\test_i2c_gpio.o
+ .debug_ranges  0x00000000000004f0       0x68 Output\obj\test\test_i2c_gpio_la.o
+ .debug_ranges  0x0000000000000558       0x50 Output\obj\test\test_i2c_la.o
+ .debug_ranges  0x00000000000005a8       0x60 Output\obj\test\test_spi_loop.o
+ .debug_ranges  0x0000000000000608       0x50 Output\obj\test\test_spi_soft_asm.o
+ .debug_ranges  0x0000000000000658       0x90 Output\obj\test\test_spi_timing.o
+ .debug_ranges  0x00000000000006e8      0x150 Output\obj\test\test_spi_w25q64.o
+ .debug_ranges  0x0000000000000838       0x58 Output\obj\test\test_timer.o
+ .debug_ranges  0x0000000000000890       0x78 Output\obj\test\test_uart.o
+ .debug_ranges  0x0000000000000908       0x88 Output\obj\test\test_uart_soft.o
 
-.debug_line     0x0000000000000000     0x4278
+.debug_line     0x0000000000000000     0x4311
  .debug_line    0x0000000000000000      0x2c9 Output\obj\interrupt.o
  .debug_line    0x00000000000002c9      0x3c1 Output\obj\main.o
  .debug_line    0x000000000000068a       0x88 Output\obj\reset.o
  .debug_line    0x0000000000000712      0x3f9 Output\obj\test\spi_hal.o
- .debug_line    0x0000000000000b0b      0x338 Output\obj\test\test_adkey.o
- .debug_line    0x0000000000000e43      0x3e4 Output\obj\test\test_gpio.o
- .debug_line    0x0000000000001227      0x416 Output\obj\test\test_i2c.o
- .debug_line    0x000000000000163d      0x4c3 Output\obj\test\test_i2c_gpio.o
- .debug_line    0x0000000000001b00      0x397 Output\obj\test\test_i2c_gpio_la.o
- .debug_line    0x0000000000001e97      0x313 Output\obj\test\test_i2c_la.o
- .debug_line    0x00000000000021aa      0x2ea Output\obj\test\test_spi_loop.o
- .debug_line    0x0000000000002494      0x4c0 Output\obj\test\test_spi_soft_asm.o
- .debug_line    0x0000000000002954      0x3f8 Output\obj\test\test_spi_timing.o
- .debug_line    0x0000000000002d4c      0x598 Output\obj\test\test_spi_w25q64.o
- .debug_line    0x00000000000032e4      0x2b8 Output\obj\test\test_spi_wave.o
- .debug_line    0x000000000000359c      0x306 Output\obj\test\test_timer.o
- .debug_line    0x00000000000038a2      0x2e9 Output\obj\test\test_timer_pwm.o
- .debug_line    0x0000000000003b8b      0x3a8 Output\obj\test\test_uart.o
- .debug_line    0x0000000000003f33      0x345 Output\obj\test\test_uart_soft.o
+ .debug_line    0x0000000000000b0b      0x3d1 Output\obj\test\test_adkey.o
+ .debug_line    0x0000000000000edc      0x3e4 Output\obj\test\test_gpio.o
+ .debug_line    0x00000000000012c0      0x416 Output\obj\test\test_i2c.o
+ .debug_line    0x00000000000016d6      0x4c3 Output\obj\test\test_i2c_gpio.o
+ .debug_line    0x0000000000001b99      0x397 Output\obj\test\test_i2c_gpio_la.o
+ .debug_line    0x0000000000001f30      0x313 Output\obj\test\test_i2c_la.o
+ .debug_line    0x0000000000002243      0x2ea Output\obj\test\test_spi_loop.o
+ .debug_line    0x000000000000252d      0x4c0 Output\obj\test\test_spi_soft_asm.o
+ .debug_line    0x00000000000029ed      0x3f8 Output\obj\test\test_spi_timing.o
+ .debug_line    0x0000000000002de5      0x598 Output\obj\test\test_spi_w25q64.o
+ .debug_line    0x000000000000337d      0x2b8 Output\obj\test\test_spi_wave.o
+ .debug_line    0x0000000000003635      0x306 Output\obj\test\test_timer.o
+ .debug_line    0x000000000000393b      0x2e9 Output\obj\test\test_timer_pwm.o
+ .debug_line    0x0000000000003c24      0x3a8 Output\obj\test\test_uart.o
+ .debug_line    0x0000000000003fcc      0x345 Output\obj\test\test_uart_soft.o
 
-.debug_str      0x0000000000000000     0x131c
+.debug_str      0x0000000000000000     0x13eb
  .debug_str     0x0000000000000000      0x510 Output\obj\interrupt.o
                                         0x582 (size before relaxing)
  .debug_str     0x0000000000000510      0x19f Output\obj\main.o
-                                        0x6b0 (size before relaxing)
+                                        0x6b5 (size before relaxing)
  .debug_str     0x00000000000006af      0x281 Output\obj\test\spi_hal.o
                                         0x794 (size before relaxing)
- .debug_str     0x0000000000000930       0xd1 Output\obj\test\test_adkey.o
-                                        0x611 (size before relaxing)
- .debug_str     0x0000000000000a01       0x4c Output\obj\test\test_gpio.o
+ .debug_str     0x0000000000000930      0x1a0 Output\obj\test\test_adkey.o
+                                        0x6f2 (size before relaxing)
+ .debug_str     0x0000000000000ad0       0x4c Output\obj\test\test_gpio.o
                                         0x557 (size before relaxing)
- .debug_str     0x0000000000000a4d       0xeb Output\obj\test\test_i2c.o
+ .debug_str     0x0000000000000b1c       0xeb Output\obj\test\test_i2c.o
                                         0x60a (size before relaxing)
- .debug_str     0x0000000000000b38       0xe5 Output\obj\test\test_i2c_gpio.o
+ .debug_str     0x0000000000000c07       0xe5 Output\obj\test\test_i2c_gpio.o
                                         0x63e (size before relaxing)
- .debug_str     0x0000000000000c1d       0x70 Output\obj\test\test_i2c_gpio_la.o
+ .debug_str     0x0000000000000cec       0x70 Output\obj\test\test_i2c_gpio_la.o
                                         0x57f (size before relaxing)
- .debug_str     0x0000000000000c8d       0x81 Output\obj\test\test_i2c_la.o
+ .debug_str     0x0000000000000d5c       0x81 Output\obj\test\test_i2c_la.o
                                         0x5a1 (size before relaxing)
- .debug_str     0x0000000000000d0e       0x80 Output\obj\test\test_spi_loop.o
+ .debug_str     0x0000000000000ddd       0x80 Output\obj\test\test_spi_loop.o
                                         0x5c1 (size before relaxing)
- .debug_str     0x0000000000000d8e       0xb8 Output\obj\test\test_spi_soft_asm.o
+ .debug_str     0x0000000000000e5d       0xb8 Output\obj\test\test_spi_soft_asm.o
                                         0x60a (size before relaxing)
- .debug_str     0x0000000000000e46       0xc9 Output\obj\test\test_spi_timing.o
+ .debug_str     0x0000000000000f15       0xc9 Output\obj\test\test_spi_timing.o
                                         0x6b5 (size before relaxing)
- .debug_str     0x0000000000000f0f      0x137 Output\obj\test\test_spi_w25q64.o
+ .debug_str     0x0000000000000fde      0x137 Output\obj\test\test_spi_w25q64.o
                                         0x801 (size before relaxing)
- .debug_str     0x0000000000001046       0x66 Output\obj\test\test_spi_wave.o
+ .debug_str     0x0000000000001115       0x66 Output\obj\test\test_spi_wave.o
                                         0x5af (size before relaxing)
- .debug_str     0x00000000000010ac       0xa3 Output\obj\test\test_timer.o
+ .debug_str     0x000000000000117b       0xa3 Output\obj\test\test_timer.o
                                         0x5ad (size before relaxing)
- .debug_str     0x000000000000114f       0x5d Output\obj\test\test_timer_pwm.o
+ .debug_str     0x000000000000121e       0x5d Output\obj\test\test_timer_pwm.o
                                         0x563 (size before relaxing)
- .debug_str     0x00000000000011ac       0xec Output\obj\test\test_uart.o
+ .debug_str     0x000000000000127b       0xec Output\obj\test\test_uart.o
                                         0x613 (size before relaxing)
- .debug_str     0x0000000000001298       0x84 Output\obj\test\test_uart_soft.o
+ .debug_str     0x0000000000001367       0x84 Output\obj\test\test_uart_soft.o
                                         0x5a0 (size before relaxing)
 
 .comment        0x0000000000000000       0x11

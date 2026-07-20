@@ -7,8 +7,8 @@
 > - [bt892x_pinfunction.md §4.2 PORTB / §8.10 SARADC](bt892x_pinfunction.md)
 > - [BT892X_UserManual_Driver.md §3 GPIO](BT892X_UserManual_Driver.md)
 > **相关 commit**：`git log smart_mini_minimax` 查看
-> **当前阶段**：阶段一原始采样 + 阶段二上拉对照与三键映射
-> **测试结果**：✅ PB5/ADC12 原始采样通过；✅ 双上拉下 PLAY/PREV/NEXT/NONE 映射通过；⬜ 5ms 扫描消抖待测试
+> **当前阶段**：阶段一原始采样 + 阶段二三键映射 + 阶段三 5ms×5 消抖与短按/短抬
+> **测试结果**：✅ PB5/ADC12 原始采样通过；✅ 三键映射通过；✅ 25ms 消抖及 SHORT/SHORT_UP 通过；⬜ 长按/长抬待测试
 
 ---
 
@@ -18,9 +18,10 @@
 |---|---|---|---|
 | **test_adkey.c** | `smart_mini/test/test_adkey.c` | `test_adkey_raw_run` / `TEST_ADKEY_RAW_EN` | 初始化 PB5/ADC12，每 100ms 采样并打印原始值 |
 | | | `test_adkey_map_run` / `TEST_ADKEY_MAP_EN` | 使用实测阈值映射 NONE/PLAY/PREV/NEXT |
+| | | `test_adkey_debounce_run` / `TEST_ADKEY_DEBOUNCE_EN` | TMR1 每 5ms 扫描，连续 5 次相同后输出短按/短抬消息 |
 | **test_adkey.h** | `smart_mini/test/test_adkey.h` | — | 测试入口声明 |
 
-阶段一只验证原始 ADC 采集；阶段二增加上拉组合对照和原始值到键值的映射。当前仍未加入 5ms 扫描消抖、短按、长按或连发状态机。
+阶段一验证原始 ADC 采集；阶段二完成上拉组合对照和原始值到键值的映射；阶段三加入 TMR1 5ms 扫描及连续 5 次相同值的按下/抬起消抖。当前仍未加入 700ms 长按、长抬或 200ms 连发状态机。
 
 ---
 
@@ -344,6 +345,103 @@ SADCCON = BIT(19)    // ADCAEN
 
 ---
 
-## 9. 下一阶段
+## 9. 阶段三：5ms 扫描消抖与短按/短抬
 
-使用 TMR1 产生 5ms 扫描节拍，对当前单次键值映射增加“连续 5 次相同才更新稳定键”的 25ms 消抖。下一轮只验证稳定按下和稳定抬起边沿，不提前实现 700ms 长按或 200ms 连发。
+### 9.1 扫描时基
+
+TMR0 已作为 main.c 的 1ms 系统中断，TMR2 已作为 1µs 延时基准，故按项目约束使用已经单独验证过的 TMR1：
+
+```text
+TMR1 输入时钟 = tmr_inc = 1MHz
+TMR1PR = 5000 - 1
+扫描周期 = 5000 × 1µs = 5ms
+```
+
+TMR1 ISR 只清除 `TMR1CPND[9]` 并递增扫描 tick。ADC12 转换、候选键统计、稳定状态更新和串口打印都在主循环完成，ISR 中不调用 `printf`。
+
+### 9.2 连续采样消抖
+
+```text
+5ms/次 × 连续 5 次相同映射 = 25ms 消抖
+```
+
+状态处理规则：
+
+1. 新采样键值与候选键不同：替换候选键，计数从 1 开始；
+2. 与候选键相同：计数加 1，最大保持为 5；
+3. 连续达到 5 次且候选键不同于稳定键：更新稳定键并产生边沿消息；
+4. ADC=121 映射为 UNKNOWN：中断本次连续计数，不更新稳定状态；
+5. 稳定键没有变化：不重复发送消息；
+6. 按键直接从 A 切换到 B：稳定后先发送 A 的 SHORT_UP，再发送 B 的 SHORT。
+
+主循环若因打印错过一个 TMR1 tick，只会延长实际消抖时间，不会把未采样的 tick 虚构成有效连续样本。
+
+### 9.3 消息定义
+
+```c
+#define KEY_SHORT    0x0000u
+#define KEY_SHORT_UP 0x0800u
+```
+
+| 按键 | 稳定按下 | 稳定抬起 |
+|---|---:|---:|
+| PLAY | `0x0001` | `0x0801` |
+| PREV | `0x0002` | `0x0802` |
+| NEXT | `0x0003` | `0x0803` |
+
+本阶段尚未实现长按，因此即使持续按住，稳定按下后也只发送一次 SHORT；松开时仍发送 SHORT_UP。
+
+### 9.4 用户实测流程
+
+| 子测试 | 用户操作 | 期望 |
+|---|---|---|
+| Test 1 | PLAY/PREV/NEXT 各按一次 | 每键一对 SHORT + SHORT_UP，键值正确 |
+| Test 2 | 每个键连续短按 10 次 | 每键正好 10 对消息，不多报、不漏报、不串键 |
+| Test 3 | 每个键持续按住约 2 秒 | 按下只报一次，保持期间无重复，松开只报一次 |
+| Test 4 | 制造不足 25ms 的极短脉冲 | 手动按键无法可靠产生，未执行，不作为阻塞项 |
+
+Test 4 需要信号发生器或 GPIO 注入才能可重复验证。当前人工按键条件无法保证小于 25ms，因此如实记录为未执行；连续 5 次状态机逻辑、正常短按和持续按住行为已由其他测试覆盖。
+
+### 9.5 用户实测输出
+
+三个按键各按一次：
+
+```text
+[TEST] msg=0x0001 KEY_SHORT PLAY raw=24
+[TEST] msg=0x0801 KEY_SHORT_UP PLAY raw=123
+[TEST] msg=0x0002 KEY_SHORT PREV raw=115
+[TEST] msg=0x0802 KEY_SHORT_UP PREV raw=123
+[TEST] msg=0x0003 KEY_SHORT NEXT raw=120
+[TEST] msg=0x0803 KEY_SHORT_UP NEXT raw=124
+```
+
+每键连续短按 10 次的统计：
+
+| 按键 | SHORT 数量 | SHORT_UP 数量 | 错键/额外消息 |
+|---|---:|---:|---:|
+| PLAY | 10 | 10 | 0 |
+| PREV | 10 | 10 | 0 |
+| NEXT | 10 | 10 | 0 |
+
+持续按住约 2 秒后，三个按键均只产生一对消息：
+
+```text
+[TEST] msg=0x0001 KEY_SHORT PLAY raw=24
+[TEST] msg=0x0801 KEY_SHORT_UP PLAY raw=123
+[TEST] msg=0x0002 KEY_SHORT PREV raw=115
+[TEST] msg=0x0802 KEY_SHORT_UP PREV raw=123
+[TEST] msg=0x0003 KEY_SHORT NEXT raw=120
+[TEST] msg=0x0803 KEY_SHORT_UP NEXT raw=123
+```
+
+按住期间没有重复消息；全程没有 `KEY_UNKNOWN`、ADC 转换超时、漏报或串键。特别是 NEXT 连续短按 10 次全部得到 `0x0003/0x0803`，证明 NEXT=120 与 NONE=123 在 5次连续采样规则下可以稳定区分。
+
+### 9.6 结论
+
+✅ **阶段三通过**：TMR1 5ms 扫描正常；连续 5 次相同值的 25ms 按下/抬起消抖正常；PLAY/PREV/NEXT 的 SHORT 和 SHORT_UP 消息值、数量、顺序均正确。人工条件无法可靠制造不足 25ms 的物理脉冲，相关子测试记录为未执行，不影响当前硬件操作下的阶段验收。
+
+---
+
+## 10. 下一阶段
+
+在阶段三稳定按下/抬起边沿基础上增加 700ms 长按计时：稳定按下先发送 SHORT，持续达到 700ms 时发送一次 LONG；700ms 之前松开发 SHORT_UP，LONG 之后松开发 LONG_UP。下一轮暂不加入 200ms HOLD 连发。

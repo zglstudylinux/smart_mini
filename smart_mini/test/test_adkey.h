@@ -7,7 +7,11 @@
 #define KEY_NEXT    0x03u
 #define KEY_UNKNOWN 0xffu
 
+#define KEY_SHORT    0x0000u
+#define KEY_SHORT_UP 0x0800u
+
 void test_adkey_raw_run(void);
 void test_adkey_map_run(void);
+void test_adkey_debounce_run(void);
 
 #endif // _TEST_ADKEY_H_
