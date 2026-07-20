@@ -7,8 +7,8 @@
 > - [bt892x_pinfunction.md §4.2 PORTB / §8.10 SARADC](bt892x_pinfunction.md)
 > - [BT892X_UserManual_Driver.md §3 GPIO](BT892X_UserManual_Driver.md)
 > **相关 commit**：`git log smart_mini_minimax` 查看
-> **当前阶段**：阶段一——PB5/ADC12 原始值采集与串口打印
-> **测试结果**：✅ ADC12 转换、按键响应和四档稳定原始值均通过；⚠️ NEXT 与 NONE 仅相差 2 LSB，键值映射阶段需继续验证裕量
+> **当前阶段**：阶段一原始采样 + 阶段二上拉对照与三键映射
+> **测试结果**：✅ PB5/ADC12 原始采样通过；✅ 双上拉下 PLAY/PREV/NEXT/NONE 映射通过；⬜ 5ms 扫描消抖待测试
 
 ---
 
@@ -17,9 +17,10 @@
 | 程序 | 路径 | 入口/开关 | 用途 |
 |---|---|---|---|
 | **test_adkey.c** | `smart_mini/test/test_adkey.c` | `test_adkey_raw_run` / `TEST_ADKEY_RAW_EN` | 初始化 PB5/ADC12，每 100ms 采样并打印原始值 |
+| | | `test_adkey_map_run` / `TEST_ADKEY_MAP_EN` | 使用实测阈值映射 NONE/PLAY/PREV/NEXT |
 | **test_adkey.h** | `smart_mini/test/test_adkey.h` | — | 测试入口声明 |
 
-本阶段只验证原始 ADC 采集，不加入键值阈值、5ms 扫描消抖、短按、长按或连发状态机。
+阶段一只验证原始 ADC 采集；阶段二增加上拉组合对照和原始值到键值的映射。当前仍未加入 5ms 扫描消抖、短按、长按或连发状态机。
 
 ---
 
@@ -257,6 +258,92 @@ SADCCON = BIT(19)    // ADCAEN
 
 ---
 
-## 7. 下一阶段
+## 7. 阶段二：上拉组合裕量对照
 
-阶段二先根据真实 ADC 数据建立 `KEY_NONE/KEY_PLAY/KEY_PREV/KEY_NEXT` 映射，并验证 NEXT/NONE 裕量；映射确认后再进入 TMR1 5ms 扫描和连续 5 次相同值的消抖测试。
+阶段一双上拉结果中 NEXT=120、NONE=122，仅相差 2 LSB。为避免直接写入缺少依据的阈值，分别实测三种手册允许的上拉组合。
+
+### 7.1 对照结果
+
+| 上拉组合 | PLAY | PREV | NEXT | NONE | 结论 |
+|---|---:|---:|---:|---:|---|
+| GPIO 10kΩ + ADC12 100kΩ | 24 | 115 | 120 | 122/123 | 四档稳定，可映射 |
+| 仅 ADC12 100kΩ | 24 | 与 NONE 大量重叠在 32～34 | 与 NONE 大量重叠在 32～34 | 33 | ❌ 无法区分 PREV/NEXT/NONE |
+| 仅 GPIO 10kΩ | 0 | 84 | 79～104，明显波动 | 92 | ❌ NEXT 与 PREV/NONE 重叠 |
+
+### 7.2 选择结论
+
+最终采用阶段一已验证的 **GPIO 10kΩ + ADC12 100kΩ双上拉**。另外两种组合均由实际硬件数据否决，不作为最终配置。
+
+---
+
+## 8. 阶段二：原始值到三键映射
+
+### 8.1 键值定义
+
+```c
+#define KEY_NONE    0x00u
+#define KEY_PLAY    0x01u
+#define KEY_PREV    0x02u
+#define KEY_NEXT    0x03u
+#define KEY_UNKNOWN 0xffu
+```
+
+### 8.2 阈值来源
+
+双上拉下实测稳定值为 PLAY=24、PREV=115、NEXT=120、NONE=122/123。PLAY/PREV 和 PREV/NEXT 使用相邻稳定值中点；NEXT/NONE 之间仅有 ADC=121，因此将 121 保留为死区，不强行映射。
+
+| ADC12 原始值 | 映射结果 | 依据 |
+|---:|---|---|
+| 0～69 | PLAY / `0x01` | 24 与 115 的中点约为 69.5 |
+| 70～117 | PREV / `0x02` | 115 与 120 的中点约为 117.5 |
+| 118～120 | NEXT / `0x03` | NEXT 稳定值为 120 |
+| 121 | UNKNOWN / `0xff` | NEXT/NONE 死区 |
+| ≥122 | NONE / `0x00` | NONE 实测为 122/123 |
+
+映射函数只完成单次 ADC 值分类，不包含消抖。按住时每 100ms 重复打印、按下或抬起瞬间出现中间状态，均属于本阶段预期行为。
+
+### 8.3 用户实测输出
+
+启动信息：
+
+```text
+[TEST] ADKEY stage 2: PB5 / ADC12 key mapping
+[TEST] PB5 pull-up: GPIO 10K + ADC12 100K
+[TEST] Map: <=69 PLAY, <=117 PREV, <=120 NEXT, 121 UNKNOWN, >=122 NONE
+[TEST] No debounce yet: repeated lines and transition UNKNOWN are expected
+```
+
+四种稳定状态：
+
+```text
+# NONE
+[TEST] ADC12 raw=123 -> key=NONE code=0x00
+
+# PLAY
+[TEST] ADC12 raw=24 -> key=PLAY code=0x01
+
+# PREV
+[TEST] ADC12 raw=115 -> key=PREV code=0x02
+
+# NEXT
+[TEST] ADC12 raw=120 -> key=NEXT code=0x03
+```
+
+实测中：
+
+- 空闲期间连续输出 NONE，没有误报 NEXT；
+- PLAY 持续按住时连续输出 PLAY；
+- PREV 持续按住时连续输出 PREV；
+- NEXT 持续按住时连续输出 NEXT，没有在 NEXT/NONE 之间跳变；
+- 快速按下和松开时，键值与 NONE 按动作交替；
+- 全程未出现 ADC 转换超时。
+
+### 8.4 结论
+
+✅ **阶段二通过**：三种板载按键均能由 ADC12 原始值正确映射到 `0x01/0x02/0x03`，抬起后恢复 `KEY_NONE=0x00`。NEXT/NONE 的原始值间隔虽小，但双上拉下持续状态稳定，且 121 已作为死区保留。
+
+---
+
+## 9. 下一阶段
+
+使用 TMR1 产生 5ms 扫描节拍，对当前单次键值映射增加“连续 5 次相同才更新稳定键”的 25ms 消抖。下一轮只验证稳定按下和稳定抬起边沿，不提前实现 700ms 长按或 200ms 连发。

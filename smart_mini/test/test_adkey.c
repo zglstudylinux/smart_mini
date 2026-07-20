@@ -1,4 +1,4 @@
-// ADKEY 阶段一测试 — PB5/ADC12 原始值采集与打印
+// ADKEY 阶段二测试 — PB5/ADC12 三键原始值映射
 //
 // 硬件依据：
 //   - bt892x_pinfunction.md §4.2 / §8.10：PB5 = ADC12
@@ -14,6 +14,7 @@
 //   - SADCDAT12[9:0] 为 10 位转换结果
 
 #include "test_common.h"
+#include "test_adkey.h"
 
 #define ADKEY_PIN_MASK              BIT(5)
 
@@ -32,13 +33,20 @@
 #define ADKEY_PRINT_PERIOD_MS       100u
 #define ADKEY_WINDOW_SAMPLES        10u
 
+// 阶段一双上拉实测稳定值：PLAY=24、PREV=115、NEXT=120、NONE=122。
+// 相邻稳定值取中点；121 保留为 NEXT/NONE 死区，不映射为任何按键。
+#define ADKEY_PLAY_MAX              69u
+#define ADKEY_PREV_MAX              117u
+#define ADKEY_NEXT_MAX              120u
+#define ADKEY_NONE_MIN              122u
+
 static void test_adkey_raw_init(void)
 {
     // SARADC 时钟：x24m_clkdiv4 = 6MHz，并打开 SARADC 时钟门。
     CLKCON0 |= SARADC_CLK_SEL_X24M_DIV4;
     CLKGAT0 |= SARADC_CLK_GATE;
 
-    // PB5：普通数字输入 + 10K 上拉；关闭其余上下拉和外设复用。
+    // PB5：普通数字输入；恢复阶段一已验证的 GPIO 10K + ADC12 100K 双上拉。
     GPIOBDIR    |=  ADKEY_PIN_MASK;
     GPIOBDE     |=  ADKEY_PIN_MASK;
     GPIOBFEN    &= ~ADKEY_PIN_MASK;
@@ -119,6 +127,67 @@ void test_adkey_raw_run(void)
                 window_max = 0;
                 window_count = 0;
             }
+        } else {
+            TEST_LOG("[TIMEOUT] ADC12 conversion did not finish in %u us",
+                     (u32)SARADC_TIMEOUT_US);
+        }
+
+        delay_ms(ADKEY_PRINT_PERIOD_MS);
+    }
+}
+
+static u8 test_adkey_map_raw(u32 raw)
+{
+    if (raw <= ADKEY_PLAY_MAX) {
+        return KEY_PLAY;
+    }
+    if (raw <= ADKEY_PREV_MAX) {
+        return KEY_PREV;
+    }
+    if (raw <= ADKEY_NEXT_MAX) {
+        return KEY_NEXT;
+    }
+    if (raw >= ADKEY_NONE_MIN) {
+        return KEY_NONE;
+    }
+    return KEY_UNKNOWN;
+}
+
+static const char *test_adkey_key_name(u8 key)
+{
+    switch (key) {
+    case KEY_NONE:
+        return "NONE";
+    case KEY_PLAY:
+        return "PLAY";
+    case KEY_PREV:
+        return "PREV";
+    case KEY_NEXT:
+        return "NEXT";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+void test_adkey_map_run(void)
+{
+    u32 raw;
+    u8 key;
+
+    TEST_LOG("========================================");
+    TEST_LOG("ADKEY stage 2: PB5 / ADC12 key mapping");
+    TEST_LOG("PB5 pull-up: GPIO 10K + ADC12 100K");
+    TEST_LOG("Map: <=69 PLAY, <=117 PREV, <=120 NEXT, 121 UNKNOWN, >=122 NONE");
+    TEST_LOG("No debounce yet: repeated lines and transition UNKNOWN are expected");
+    TEST_LOG("========================================");
+
+    test_adkey_raw_init();
+
+    while (1) {
+        if (test_adkey_raw_read(&raw)) {
+            key = test_adkey_map_raw(raw);
+            TEST_LOG("ADC12 raw=%u -> key=%s code=0x%02x",
+                     raw, test_adkey_key_name(key), (u32)key);
         } else {
             TEST_LOG("[TIMEOUT] ADC12 conversion did not finish in %u us",
                      (u32)SARADC_TIMEOUT_US);
