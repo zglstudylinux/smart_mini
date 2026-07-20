@@ -42,6 +42,7 @@ extern void test_i2c_gpio_la_run(void);
 extern void test_adkey_raw_run(void);
 extern void test_adkey_map_run(void);
 extern void test_adkey_debounce_run(void);
+extern void test_adkey_long_run(void);
 
 // ===== Test enable switches (enable ONE at a time) =====
 // Default: hardware I2C + AT24C02 functional test
@@ -68,10 +69,11 @@ extern void test_adkey_debounce_run(void);
 // #define TEST_I2C_LA_EN   1
 // #define TEST_I2C_GPIO_EN      1
 //#define TEST_I2C_GPIO_LA_EN   1
-// ---- ADKEY：原始值 / 三键映射 / 5ms 消抖一次只开一个 ----
+// ---- ADKEY：原始值 / 三键映射 / 消抖 / 长按一次只开一个 ----
 // #define TEST_ADKEY_RAW_EN      1
 // #define TEST_ADKEY_MAP_EN      1
-#define TEST_ADKEY_DEBOUNCE_EN 1
+// #define TEST_ADKEY_DEBOUNCE_EN 1
+#define TEST_ADKEY_LONG_EN     1
 
 AT(.com_rodata.exception)
 const char str_cpu_error[] = "ERR: %x, EPC: %x\n";
@@ -326,6 +328,9 @@ int main(void)
 #endif
 #ifdef TEST_ADKEY_DEBOUNCE_EN
     test_adkey_debounce_run();
+#endif
+#ifdef TEST_ADKEY_LONG_EN
+    test_adkey_long_run();
 #endif
 
     while (1);

@@ -41,6 +41,8 @@
 #define ADKEY_NONE_MIN              122u
 #define ADKEY_SCAN_PERIOD_US        5000u
 #define ADKEY_DEBOUNCE_SAMPLES      5u
+#define ADKEY_LONG_MS               700u
+#define ADKEY_LONG_TICKS            ((ADKEY_LONG_MS * 1000u) / ADKEY_SCAN_PERIOD_US)
 
 static volatile u32 g_adkey_scan_tick = 0;
 
@@ -299,6 +301,108 @@ void test_adkey_debounce_run(void)
             u8 old_key = stable_key;
             stable_key = candidate_key;
             test_adkey_emit_transition(old_key, stable_key, raw);
+        }
+    }
+}
+
+void test_adkey_long_run(void)
+{
+    u32 handled_tick;
+    u32 current_tick;
+    u32 press_tick = 0;
+    u32 held_ms;
+    u32 raw;
+    u8 sampled_key;
+    u8 candidate_key = KEY_NONE;
+    u8 stable_key = KEY_NONE;
+    u8 same_count = 0;
+    bool long_sent = false;
+
+    TEST_LOG("========================================");
+    TEST_LOG("ADKEY stage 4: 700ms long press / long release");
+    TEST_LOG("Scan: TMR1 5ms; debounce: 5 samples (25ms)");
+    TEST_LOG("Events: SHORT -> LONG at 700ms -> LONG_UP on release");
+    TEST_LOG("HOLD repeat is NOT implemented in this stage");
+    TEST_LOG("========================================");
+
+    test_adkey_raw_init();
+    test_adkey_timer1_init();
+    handled_tick = g_adkey_scan_tick;
+
+    while (1) {
+        current_tick = g_adkey_scan_tick;
+        if (current_tick == handled_tick) {
+            continue;
+        }
+        handled_tick = current_tick;
+
+        if (!test_adkey_raw_read(&raw)) {
+            TEST_LOG("[TIMEOUT] ADC12 conversion did not finish in %u us",
+                     (u32)SARADC_TIMEOUT_US);
+            continue;
+        }
+
+        sampled_key = test_adkey_map_raw(raw);
+        if (sampled_key == KEY_UNKNOWN) {
+            candidate_key = KEY_UNKNOWN;
+            same_count = 0;
+            continue;
+        }
+
+        if (sampled_key != candidate_key) {
+            candidate_key = sampled_key;
+            same_count = 1;
+            continue;
+        }
+
+        if (same_count < ADKEY_DEBOUNCE_SAMPLES) {
+            same_count++;
+        }
+
+        if ((same_count >= ADKEY_DEBOUNCE_SAMPLES) &&
+            (candidate_key != stable_key)) {
+            u8 old_key = stable_key;
+            held_ms = (current_tick - press_tick) *
+                      (ADKEY_SCAN_PERIOD_US / 1000u);
+
+            if (old_key != KEY_NONE) {
+                u16 release_message;
+                if (long_sent) {
+                    release_message = (u16)(KEY_LONG_UP | old_key);
+                    TEST_LOG("msg=0x%04x KEY_LONG_UP %s held=%u ms raw=%u",
+                             (u32)release_message,
+                             test_adkey_key_name(old_key), held_ms, raw);
+                } else {
+                    release_message = (u16)(KEY_SHORT_UP | old_key);
+                    TEST_LOG("msg=0x%04x KEY_SHORT_UP %s held=%u ms raw=%u",
+                             (u32)release_message,
+                             test_adkey_key_name(old_key), held_ms, raw);
+                }
+            }
+
+            stable_key = candidate_key;
+            long_sent = false;
+
+            if (stable_key != KEY_NONE) {
+                u16 press_message = (u16)(KEY_SHORT | stable_key);
+                press_tick = current_tick;
+                TEST_LOG("msg=0x%04x KEY_SHORT %s raw=%u",
+                         (u32)press_message,
+                         test_adkey_key_name(stable_key), raw);
+            }
+        }
+
+        if ((stable_key != KEY_NONE) &&
+            (sampled_key == stable_key) &&
+            !long_sent &&
+            ((u32)(current_tick - press_tick) >= ADKEY_LONG_TICKS)) {
+            u16 long_message = (u16)(KEY_LONG | stable_key);
+            held_ms = (current_tick - press_tick) *
+                      (ADKEY_SCAN_PERIOD_US / 1000u);
+            long_sent = true;
+            TEST_LOG("msg=0x%04x KEY_LONG %s held=%u ms raw=%u",
+                     (u32)long_message,
+                     test_adkey_key_name(stable_key), held_ms, raw);
         }
     }
 }

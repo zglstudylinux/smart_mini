@@ -7,8 +7,8 @@
 > - [bt892x_pinfunction.md §4.2 PORTB / §8.10 SARADC](bt892x_pinfunction.md)
 > - [BT892X_UserManual_Driver.md §3 GPIO](BT892X_UserManual_Driver.md)
 > **相关 commit**：`git log smart_mini_minimax` 查看
-> **当前阶段**：阶段一原始采样 + 阶段二三键映射 + 阶段三 5ms×5 消抖与短按/短抬
-> **测试结果**：✅ PB5/ADC12 原始采样通过；✅ 三键映射通过；✅ 25ms 消抖及 SHORT/SHORT_UP 通过；⬜ 长按/长抬待测试
+> **当前阶段**：阶段一原始采样 + 阶段二三键映射 + 阶段三 5ms×5 消抖 + 阶段四 700ms 长按/长抬
+> **测试结果**：✅ PB5/ADC12 原始采样通过；✅ 三键映射通过；✅ 25ms 消抖及 SHORT/SHORT_UP 通过；✅ 700ms LONG/LONG_UP 通过；⬜ 200ms HOLD 连发待测试
 
 ---
 
@@ -19,9 +19,10 @@
 | **test_adkey.c** | `smart_mini/test/test_adkey.c` | `test_adkey_raw_run` / `TEST_ADKEY_RAW_EN` | 初始化 PB5/ADC12，每 100ms 采样并打印原始值 |
 | | | `test_adkey_map_run` / `TEST_ADKEY_MAP_EN` | 使用实测阈值映射 NONE/PLAY/PREV/NEXT |
 | | | `test_adkey_debounce_run` / `TEST_ADKEY_DEBOUNCE_EN` | TMR1 每 5ms 扫描，连续 5 次相同后输出短按/短抬消息 |
+| | | `test_adkey_long_run` / `TEST_ADKEY_LONG_EN` | 阶段三状态机 + 700ms 长按/长抬消息 |
 | **test_adkey.h** | `smart_mini/test/test_adkey.h` | — | 测试入口声明 |
 
-阶段一验证原始 ADC 采集；阶段二完成上拉组合对照和原始值到键值的映射；阶段三加入 TMR1 5ms 扫描及连续 5 次相同值的按下/抬起消抖。当前仍未加入 700ms 长按、长抬或 200ms 连发状态机。
+阶段一验证原始 ADC 采集；阶段二完成上拉组合对照和原始值到键值的映射；阶段三加入 TMR1 5ms 扫描及连续 5 次相同值的按下/抬起消抖；阶段四加入 700ms 长按与长抬。阶段五计划加入 200ms HOLD 连发。
 
 ---
 
@@ -442,6 +443,120 @@ Test 4 需要信号发生器或 GPIO 注入才能可重复验证。当前人工�
 
 ---
 
-## 10. 下一阶段
+## 10. 阶段四：700ms 长按与长抬
 
-在阶段三稳定按下/抬起边沿基础上增加 700ms 长按计时：稳定按下先发送 SHORT，持续达到 700ms 时发送一次 LONG；700ms 之前松开发 SHORT_UP，LONG 之后松开发 LONG_UP。下一轮暂不加入 200ms HOLD 连发。
+### 10.1 消息定义
+
+```c
+#define KEY_LONG     0x0a00u
+#define KEY_LONG_UP  0x0c00u
+```
+
+完整消息值：
+
+| 按键 | SHORT | SHORT_UP | LONG | LONG_UP |
+|---|---:|---:|---:|---:|
+| PLAY | `0x0001` | `0x0801` | `0x0a01` | `0x0c01` |
+| PREV | `0x0002` | `0x0802` | `0x0a02` | `0x0c02` |
+| NEXT | `0x0003` | `0x0803` | `0x0a03` | `0x0c03` |
+
+### 10.2 计时基准
+
+TMR1 5ms tick 仍然有效。长按阈值：
+
+```c
+#define ADKEY_LONG_MS    700u
+#define ADKEY_LONG_TICKS ((ADKEY_LONG_MS * 1000u) / ADKEY_SCAN_PERIOD_US) // 140
+```
+
+`press_tick` 在每次稳定按下并发出 SHORT 的瞬间记录。LONG 触发条件：
+
+```c
+((u32)(current_tick - press_tick) >= ADKEY_LONG_TICKS)
+```
+
+无符号减法保证 2^32 × 5ms ≈ 68 年的 tick 计数回绕安全。
+
+### 10.3 事件序列
+
+| 阶段 | 操作 | 消息 |
+|---|---|---|
+| 1 | 稳定按下完成 25ms 消抖 | `KEY_SHORT \| key` |
+| 2 | SHORT 之后约 700ms | `KEY_LONG \| key`（只发一次） |
+| 3 | 700ms 之前稳定抬起 | `KEY_SHORT_UP \| key` |
+| 4 | 700ms 之后稳定抬起 | `KEY_LONG_UP \| key` |
+
+由于 `press_tick` 在 SHORT 发送瞬间记录，从物理触碰到 LONG 实际约为 25ms（消抖）+ 700ms = 约 725ms。
+
+### 10.4 用户实测
+
+#### Test 1：三个键各短按一次
+
+[adc.txt:6-11](test/adc.txt#L6-L11)：
+
+```text
+PLAY: 0x0001 → 0x0801 (held=145 ms)
+PREV: 0x0002 → 0x0802 (held=150 ms)
+NEXT: 0x0003 → 0x0803 (held=125 ms)
+```
+
+每个键没有出现 LONG/LONG_UP。
+
+#### Test 2：三个键各长按约 0.8～1.3 秒
+
+[adc.txt:12-20](test/adc.txt#L12-L20)：
+
+```text
+PLAY: 0x0001 → 0x0a01 (held=700 ms) → 0x0c01 (held=795 ms)
+PREV: 0x0002 → 0x0a02 (held=700 ms) → 0x0c02 (held=1315 ms)
+NEXT: 0x0003 → 0x0a03 (held=700 ms) → 0x0c03 (held=820 ms)
+```
+
+LONG 的 `held=700 ms` 与阈值一致；松开时 LONG_UP 的 `held` 等于从 SHORT 到抬起的总时长减去 25ms 消抖。
+
+#### Test 3：三个键各长按约 2.5～3.8 秒
+
+[adc.txt:21-29](test/adc.txt#L21-L29)：
+
+```text
+PLAY: 0x0001 → 0x0a01 → 0x0c01 (held=3835 ms)
+PREV: 0x0002 → 0x0a02 → 0x0c02 (held=2735 ms)
+NEXT: 0x0003 → 0x0a03 → 0x0c03 (held=2565 ms)
+```
+
+每个键在 700ms 之后保持期间没有新消息。
+
+#### Test 4：短按/长按交替
+
+[adc.txt:30-44](test/adc.txt#L30-L44)：
+
+```text
+PLAY 短按: 0x0001 → 0x0801 (held=155 ms)
+PLAY 长按: 0x0001 → 0x0a01 → 0x0c01 (held=1555 ms)
+PREV 短按: 0x0002 → 0x0802 (held=165 ms)
+PREV 长按: 0x0002 → 0x0a02 → 0x0c02 (held=1525 ms)
+NEXT 短按: 0x0003 → 0x0803 (held=110 ms)
+NEXT 长按: 0x0003 → 0x0a03 → 0x0c03 (held=1900 ms)
+```
+
+每个键的 SHORT_UP 和 LONG_UP 不会混淆。
+
+### 10.5 结论
+
+✅ **阶段四通过**：
+
+- SHORT 在 25ms 消抖完成时发送；
+- LONG 在 SHORT 之后 700ms 发送，且只发送一次；
+- 700ms 前松开发 SHORT_UP；
+- LONG 后松开发 LONG_UP；
+- 长时间按住期间没有重复消息；
+- NEXT 同样能正确识别 LONG/LONG_UP，未受阈值死区影响；
+- 没有 ADC 转换超时、串键或事件重复。
+
+P/P 长按测试中实际按住达到约 3.8 秒，没有触发 PB5 的 10S Reset 复位，符合芯片 10 秒阈值。
+
+---
+
+## 11. 下一阶段
+
+在阶段四 LONG 之后增加 200ms HOLD 连发：第一次 HOLD 在 LONG 后约 200ms 出现，此后每 200ms 重复一次，直到松开；松开仍发 LONG_UP。下一轮会同时处理 UNKNOWN 抖动下的连发不中断判定。
