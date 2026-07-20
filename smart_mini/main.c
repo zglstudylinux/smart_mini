@@ -13,6 +13,7 @@
 #include "test/test_i2c_la.h"
 #include "test/test_i2c_gpio.h"
 #include "test/test_i2c_gpio_la.h"
+#include "test/test_adkey.h"
 
 #define UART_BAUD           1500000
 #define UART_BAUD_VAL       (((24000000 + (UART_BAUD / 2)) / UART_BAUD) - 1)
@@ -38,6 +39,7 @@ extern void test_i2c_run(void);
 extern void test_i2c_la_run(void);
 extern void test_i2c_gpio_run(void);
 extern void test_i2c_gpio_la_run(void);
+extern void test_adkey_raw_run(void);
 
 // ===== Test enable switches (enable ONE at a time) =====
 // Default: hardware I2C + AT24C02 functional test
@@ -46,7 +48,7 @@ extern void test_i2c_gpio_la_run(void);
 // #define TEST_TIMER_EN   1
 // #define TEST_TIMER_PWM_EN  1   // TMR3 三路 PWM (PB0/PB1/PB2)；注意与 UART2 共用 PB1/PB2，不能与 TEST_UART_EN 同开
 // ---- UART：软/硬各一份，共用 PB2(TX)/PB1(RX)，一次只开一个 ----
- #define TEST_UART_EN    1        // 硬件 UART2 回环 (跳线 PB2<->PB1)
+// #define TEST_UART_EN    1        // 硬件 UART2 回环 (跳线 PB2<->PB1)
 // #define TEST_UART_SEND_EN  1   // 硬件 UART2 持续发送 (PB2->USB-TTL)
 // #define TEST_UART_RECV_EN  1   // 硬件 UART2 持续接收 (USB-TTL->PB1)
 // #define TEST_UART_CONSOLE_EN 1  // 硬件 UART2 收发回显 + printf 重定向到 UART2 (PB2/PB1)
@@ -64,6 +66,8 @@ extern void test_i2c_gpio_la_run(void);
 // #define TEST_I2C_LA_EN   1
 // #define TEST_I2C_GPIO_EN      1
 //#define TEST_I2C_GPIO_LA_EN   1
+// ---- ADKEY：阶段一仅打印 PB5/ADC12 原始值 ----
+#define TEST_ADKEY_RAW_EN      1
 
 AT(.com_rodata.exception)
 const char str_cpu_error[] = "ERR: %x, EPC: %x\n";
@@ -309,6 +313,9 @@ int main(void)
 #endif
 #ifdef TEST_I2C_GPIO_LA_EN
     test_i2c_gpio_la_run();
+#endif
+#ifdef TEST_ADKEY_RAW_EN
+    test_adkey_raw_run();
 #endif
 
     while (1);

@@ -58,6 +58,10 @@
 		</Unit>
 		<Unit filename="test/spi_hal.h" />
 		<Unit filename="test/test_common.h" />
+		<Unit filename="test/test_adkey.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_adkey.h" />
 		<Unit filename="test/test_gpio.c">
 			<Option compilerVar="CC" />
 		</Unit>
