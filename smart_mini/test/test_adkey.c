@@ -43,6 +43,8 @@
 #define ADKEY_DEBOUNCE_SAMPLES      5u
 #define ADKEY_LONG_MS               700u
 #define ADKEY_LONG_TICKS            ((ADKEY_LONG_MS * 1000u) / ADKEY_SCAN_PERIOD_US)
+#define ADKEY_HOLD_MS               200u
+#define ADKEY_HOLD_TICKS            ((ADKEY_HOLD_MS * 1000u) / ADKEY_SCAN_PERIOD_US)
 
 static volatile u32 g_adkey_scan_tick = 0;
 
@@ -307,9 +309,19 @@ void test_adkey_debounce_run(void)
 
 void test_adkey_long_run(void)
 {
+    TEST_LOG("ADKEY stage 4 has been merged into stage 5 (HOLD)");
+    TEST_LOG("Please enable TEST_ADKEY_HOLD_EN instead");
+    while (1) {
+        delay_ms(1000);
+    }
+}
+
+void test_adkey_hold_run(void)
+{
     u32 handled_tick;
     u32 current_tick;
     u32 press_tick = 0;
+    u32 long_tick = 0;
     u32 held_ms;
     u32 raw;
     u8 sampled_key;
@@ -319,10 +331,9 @@ void test_adkey_long_run(void)
     bool long_sent = false;
 
     TEST_LOG("========================================");
-    TEST_LOG("ADKEY stage 4: 700ms long press / long release");
+    TEST_LOG("ADKEY stage 5: 200ms HOLD repeat");
     TEST_LOG("Scan: TMR1 5ms; debounce: 5 samples (25ms)");
-    TEST_LOG("Events: SHORT -> LONG at 700ms -> LONG_UP on release");
-    TEST_LOG("HOLD repeat is NOT implemented in this stage");
+    TEST_LOG("Events: SHORT -> LONG at 700ms -> HOLD every 200ms -> LONG_UP on release");
     TEST_LOG("========================================");
 
     test_adkey_raw_init();
@@ -382,6 +393,7 @@ void test_adkey_long_run(void)
 
             stable_key = candidate_key;
             long_sent = false;
+            long_tick = 0;
 
             if (stable_key != KEY_NONE) {
                 u16 press_message = (u16)(KEY_SHORT | stable_key);
@@ -400,8 +412,22 @@ void test_adkey_long_run(void)
             held_ms = (current_tick - press_tick) *
                       (ADKEY_SCAN_PERIOD_US / 1000u);
             long_sent = true;
+            long_tick = current_tick;
             TEST_LOG("msg=0x%04x KEY_LONG %s held=%u ms raw=%u",
                      (u32)long_message,
+                     test_adkey_key_name(stable_key), held_ms, raw);
+        }
+
+        if ((stable_key != KEY_NONE) &&
+            (sampled_key == stable_key) &&
+            long_sent &&
+            ((u32)(current_tick - long_tick) >= ADKEY_HOLD_TICKS)) {
+            u16 hold_message = (u16)(KEY_HOLD | stable_key);
+            held_ms = (current_tick - press_tick) *
+                      (ADKEY_SCAN_PERIOD_US / 1000u);
+            long_tick = current_tick;
+            TEST_LOG("msg=0x%04x KEY_HOLD %s held=%u ms raw=%u",
+                     (u32)hold_message,
                      test_adkey_key_name(stable_key), held_ms, raw);
         }
     }
