@@ -13,4 +13,8 @@ void test_uart2_send_run(void);
 void test_uart2_recv_run(void);
 void test_uart2_console_run(void);
 
+// 初始化 UART2(PB2/PB1, 115200 8N1) 并把 printf 重定向到 UART2。
+// 调用后所有 printf 走 PB2；想换回 UART0/PB3 调 my_printf_init(uart_putchar)。
+void uart2_console_init(void);
+
 #endif // _TEST_UART_H_

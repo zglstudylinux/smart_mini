@@ -189,13 +189,23 @@ static void uart2_console_putchar(char ch)
     uart2_putc((u8)ch);
 }
 
-void test_uart2_console_run(void)
+/**
+ * @brief  初始化 UART2 + 把 printf 重定向到 UART2 (PB2 TX @ 115200 8N1)
+ *
+ * 调用后所有 printf 走 UART2/PB2。main.c 想让后续 printfs 全部走 UART2
+ * 时调一次即可（不必再走 test_uart2_console_run）。
+ *
+ * 想换回 UART0/PB3 调 my_printf_init(uart_putchar)。
+ */
+void uart2_console_init(void)
 {
     uart2_test_init();
-
-    // ★ 把 printf 从 UART0(PB3) 重定向到 UART2(PB2)
-    //   my_printf_init 是 ROM 提供的回调注册接口（reset.S .set 0x8401c，clib.h 声明）
     my_printf_init(uart2_console_putchar);
+}
+
+void test_uart2_console_run(void)
+{
+    uart2_console_init();
 
     printf("\r\n===== BT892X UART2 Console (printf -> UART2) =====\r\n");
     printf("UART2: TX=PB2, RX=PB1, 115200bps 8N1\r\n");

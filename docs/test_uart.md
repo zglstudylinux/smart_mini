@@ -1,13 +1,14 @@
 # BT892X UART 测试报告
 
-> **测试日期**：2026-07-17
+> **测试日期**：2026-07-17（初版） / 2026-07-20（§2.6 UART0 异常 + main.c 重定向更新）
 > **测试芯片**：BT892X（中科蓝讯 32-bit RISC-V SoC）
 > **参考手册**：
 > - [BT892X_UserManual_Driver.md §6 UART](../BT892X_UserManual_Driver.md)（UARTCON §6.2）、§3.3 FUNCMCON1、§3.2 GPIO
 > - [bt892x_pinfunction.md §4.2 PORTB / §5.1 UART](../bt892x_pinfunction.md)
 > **相关 commit**：`git log smart_mini_minimax` 查看
 > **测试模块**：**硬件 UART2**（PB2=TX/PB1=RX）+ **软件 bit-bang UART**（同引脚）+ **printf 重定向到 UART2**
-> **测试结果**：✅ 硬件回环 256/256、✅ 持续发送、✅ printf 重定向 banner；⬜ 硬件 UART2 外部接收（PC→PB1）**因 TTL2 适配器损坏未测，留后续**；⬜ 软件 bit-bang 回环待实测
+> **当前 printf 通道**：**UART2/PB2@115200**（main.c 已固定走 UART2；UART0/PB3 调试串口暂不可用，详见 §2.6）
+> **测试结果**：✅ 硬件回环 256/256、✅ 持续发送、✅ printf 重定向 banner；⬜ 硬件 UART2 外部接收（PC→PB1）**因 TTL2 适配器损坏未测，留后续**；⬜ 软件 bit-bang 回环待实测；⚠️ UART0/PB3 调试打印异常，**待 ROM 反汇编确认根因**（详见 §2.6）
 
 ---
 
@@ -77,6 +78,11 @@ void my_printf_init(void (*putchar)(char));   // ROM 接口，reset.S .set 到 0
 
 printf(=my_printf) 通过 `my_printf_init` 注册的字符回调输出。默认走 `uart_putchar`→UART0(PB3)；
 调用 `my_printf_init(uart2_console_putchar)` 即把 printf 改到 UART2(PB2)。
+
+**应用层封装**：`test_uart.c` 提供了 `uart2_console_init()`（[test_uart.c:192](../smart_mini/test/test_uart.c)），
+内部完成 `uart2_test_init()` + `my_printf_init(uart2_console_putchar)` 两件事。
+main.c 现在默认调它（[main.c:238](../smart_mini/main.c)），让所有 build 的 printf 统一走 UART2，
+详见 §2.6。
 
 ### 1.5 UART 引脚（[bt892x_pinfunction.md](../bt892x_pinfunction.md) §5.1 第 204 行 / §4.2 第 115-116 行）
 
@@ -161,6 +167,46 @@ UART2: TX=PB2, RX=PB1, 115200bps 8N1
 
 ---
 
+### 2.6 ⚠️ UART0/PB3 调试打印异常 + 当前临时绕过（2026-07-20 更新）
+
+**现象**：烧录 `TEST_UART_CONSOLE_EN`（[main.c:52](../smart_mini/main.c)）后，**切回其它 build**
+（`TEST_UART_EN` / `TEST_UART_RECV_EN` / `TEST_I2C_EN` / ...），即便是 **完整断电复位**（拔 USB 重插），
+PB3 @ 1.5M 调试口**仍然无任何输出**，包括 main.c 的 `printf("Hello SMART Flash MiniProj\n")`。
+
+**根因（强猜测，未验证）**：`test_uart2_console_run()` 调用 `my_printf_init(uart2_console_putchar)`
+（[test_uart.c:198](../smart_mini/test/test_uart.c)）把 ROM `my_printf` 的字符回调从默认 `uart_putchar`
+改成 `uart2_console_putchar`。ROM 把这个函数指针存在 **私有 RAM**，可能位于 BT892X 的
+**VDDBT 备份域**（[main.c:225](../smart_mini/main.c) `RTCCON3 |= BIT(0)` 启用）。
+备份域**冷启动不重置**，且 ROM 可能内部对回调做了缓存；调用 `my_printf_init(uart_putchar)`
+**无法真正覆盖**该槽位。
+
+**正式根因待 ROM 反汇编确认**（参考 plan 调研记录：
+`C:\Users\admin\.claude\plans\test-uart-console-en-utype-chars-warm-popcorn.md`）。
+
+**临时绕过（已落地，2026-07-20）**：在 main.c 第一个 printf 之前统一调
+`uart2_console_init()`，把 **所有 printf 重定向到 UART2/PB2@115200**，
+完全不依赖 UART0/PB3：
+
+```c
+// smart_mini/main.c:237-240
+uart2_console_init();   // 封装 uart2_test_init() + my_printf_init(uart2_console_putchar)
+printf("Hello SMART Flash MiniProj\n");
+```
+
+`uart2_console_init()` 实现见 [test_uart.c:192-200](../smart_mini/test/test_uart.c)，声明在
+[test_uart.h:14](../smart_mini/test/test_uart.h)。`test_uart2_console_run()` 内部已重构为调它。
+
+| 项 | 说明 |
+|---|---|
+| 接线 | **PB2 → USB-TTL RX，PB1 ← USB-TTL TX，GND-GND**（所有 build 统一） |
+| 波特率 | 115200 8N1 |
+| 接线注意 | PB2↔PB1 **不要短接**（否则 `uart2_putc` 经跳线回到 `uart2_getc` 形成自激，见 §5） |
+| 优势 | CONSOLE_EN ↔ 其它 build 来回切、暖/冷复位都不影响；PB3 那条线可永久闲置 |
+| 副作用 | UART0 硬件仍由 `uart0_mapping_sel()` 初始化过但**不再有字符输出**（节能省线） |
+| 恢复 UART0 | 任意位置调 `my_printf_init(uart_putchar);` 即可（无需重 init UART0） |
+
+---
+
 ## 3. 测试程序 2：test_uart_soft.c（软件 bit-bang UART）
 
 ### 3.1 原理
@@ -216,6 +262,7 @@ GPIOBFEN &= ~BIT(1); GPIOBDE |= BIT(1); GPIOBDIR |= BIT(1); GPIOBPU |= BIT(1);
 | 接收无显示（PC 没发） | 串口助手 COM 选错/未真正发出 | 确认发到"TX 接 PB1"的那个适配器，看发送计数 |
 | 接收无显示（适配器坏） | USB-TTL TX 脚故障（本次即此） | 换适配器自回环验证（短接其 TX↔RX） |
 | printf 重定向后 PB3 无输出 | printf 已切到 UART2 | 正常；重定向前的 banner 仍在 PB3 |
+| 烧 CONSOLE_EN 后其它 build PB3 无输出 | ROM my_printf 回调槽在 VDDBT 备份域 / 缓存（详见 §2.6） | main.c 已固定走 UART2（`uart2_console_init()`），放弃 UART0；待 ROM 反汇编定根 |
 
 ---
 
@@ -237,6 +284,8 @@ GPIOBFEN &= ~BIT(1); GPIOBDE |= BIT(1); GPIOBDIR |= BIT(1); GPIOBPU |= BIT(1);
 - **UART1(PA6/PA7) → UART2(PB1/PB2)**：换到实际可用的口，硬件回环 256/256 验证收发正常。
 - **printf 重定向**：用 ROM 的 `my_printf_init` 把控制台切到 UART2，单适配器即可做全双工回显测试。
 - **软/硬同引脚共存**：软件 bit-bang 与硬件 UART2 共用 PB2/PB1，互斥启用。
+- **UART0/PB3 临时弃用**：ROM `my_printf` 回调槽疑似在 VDDBT 备份域/有缓存，`my_printf_init(uart_putchar)` 覆盖不掉；
+  main.c 已统一走 `uart2_console_init()` 重定向到 UART2/PB2@115200，彻底绕开 UART0（详见 §2.6）。待 ROM 反汇编定根。
 - **手册依据**：每条寄存器操作对应 [§6.2 / §3.3 / §3.2](../BT892X_UserManual_Driver.md)。
 
 ---
@@ -245,8 +294,8 @@ GPIOBFEN &= ~BIT(1); GPIOBDE |= BIT(1); GPIOBDIR |= BIT(1); GPIOBPU |= BIT(1);
 
 | 文件 | 作用 |
 |---|---|
-| `smart_mini/test/test_uart.c` | 硬件 UART2 测试（回环/发送/接收/控制台） |
-| `smart_mini/test/test_uart.h` | 头文件（4 个入口声明） |
+| `smart_mini/test/test_uart.c` | 硬件 UART2 测试（回环/发送/接收/控制台）+ `uart2_console_init()` 实现 |
+| `smart_mini/test/test_uart.h` | 头文件（4 个入口声明 + `uart2_console_init` 声明） |
 | `smart_mini/test/test_uart_soft.c` | 软件 bit-bang UART 测试 |
 | `smart_mini/test/test_uart_soft.h` | 头文件 |
 | `smart_mini/main.c` | 入口（`TEST_UART_*` 开关组）+ `uart_putchar`(UART0 默认打印) |

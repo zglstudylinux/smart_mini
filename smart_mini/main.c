@@ -46,7 +46,7 @@ extern void test_i2c_gpio_la_run(void);
 // #define TEST_TIMER_EN   1
 // #define TEST_TIMER_PWM_EN  1   // TMR3 三路 PWM (PB0/PB1/PB2)；注意与 UART2 共用 PB1/PB2，不能与 TEST_UART_EN 同开
 // ---- UART：软/硬各一份，共用 PB2(TX)/PB1(RX)，一次只开一个 ----
-// #define TEST_UART_EN    1        // 硬件 UART2 回环 (跳线 PB2<->PB1)
+ #define TEST_UART_EN    1        // 硬件 UART2 回环 (跳线 PB2<->PB1)
 // #define TEST_UART_SEND_EN  1   // 硬件 UART2 持续发送 (PB2->USB-TTL)
 // #define TEST_UART_RECV_EN  1   // 硬件 UART2 持续接收 (USB-TTL->PB1)
 // #define TEST_UART_CONSOLE_EN 1  // 硬件 UART2 收发回显 + printf 重定向到 UART2 (PB2/PB1)
@@ -56,7 +56,7 @@ extern void test_i2c_gpio_la_run(void);
 //       LOOP↔WAVE↔W25Q64↔TIMING 不能同开（共用 PE4/PE5/PE6/PE7）
 //       一次烧一个看现象
 // #define TEST_SPI_LOOP_EN         1  // 跳线接法：软件回环 + 硬件回环（默认；跳线 PE7<->PE5）
- #define TEST_SPI_WAVE_EN         1  // LA 接法：软件波形 + 硬件波形（PE6/PE7 给 LA）
+// #define TEST_SPI_WAVE_EN         1  // LA 接法：软件波形 + 硬件波形（PE6/PE7 给 LA）
 // #define TEST_SPI_W25Q64_EN       1  // Flash 接法：软硬 W25Q64 全套（CS=PE4/CLK=PE6/DI=PE7/DO=PE5）
 // #define TEST_SPI_SOFT_ASM_EN     1  // 纯 GPIO：软件 bit-bang C vs ASM 速度对比
 // #define TEST_SPI_TIMING_EN       1  // Flash 接法：polling/INT/DMA 时间对比
@@ -234,6 +234,9 @@ int main(void)
     PICCON |= 0x10003;                                  //LOW PRIO interrupt enable
 
     //Below is test code
+    /* 把 printf 重定向到 UART2 PB2@115200，从此往后 main.c 及所有 test_*_run() 里的 printf 都走 UART2 */
+    uart2_console_init();
+
     printf("Hello SMART Flash MiniProj\n");
 
 //    printf("test %%d %%i -123: %d %i\n", -123, -123);
