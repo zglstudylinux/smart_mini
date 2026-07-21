@@ -149,8 +149,11 @@ void test_uart2_send_run(void)
 // ================================================================
 //  测试 3: 持续接收 (PC 串口助手 → USB转TTL → PB1 RX)
 //  接线: USB-TTL TX → PB1, GND → GND
-//  收到的数据通过 UART0 printf 打印到串口
+//  收到的数据按行缓存，收到 '\n' 或缓冲满时整行通过 UART0 printf 输出。
+//  这样可以避免每字节一行造成终端刷屏，并支持显示完整字符串。
 // ================================================================
+#define UART2_RECV_LINE_MAX  64u
+
 void test_uart2_recv_run(void)
 {
     printf("\n===== BT892X UART2 Recv Test =====\n\n");
@@ -160,20 +163,77 @@ void test_uart2_recv_run(void)
     printf("UART2 RX = PB1, 115200bps 8N1\n");
     printf("Wiring: USB-TTL TX -> PB1, GND -> GND\n");
     printf("Send data from PC serial monitor @ 115200\n");
-    printf("Received bytes will be printed here:\n\n");
+    printf("Type a line + Enter; press Ctrl+C (0x03) to leave the test\n");
+    printf("Received lines will be printed here:\n\n");
+
+    u8  line_buf[UART2_RECV_LINE_MAX + 1u];
+    u32 line_len = 0;
+    u32 rx_count = 0;
+    u32 line_count = 0;
 
     while (1) {
         u8 ch = uart2_getc();
 
-        // 可打印字符直接显示，控制字符显示十六进制
-        if (ch >= 0x20 && ch <= 0x7E) {
-            printf("UART2 RX: '%c' (0x%02X)\n", ch, ch);
-        } else if (ch == '\r' || ch == '\n') {
-            printf("UART2 RX: <CR/LF> (0x%02X)\n", ch);
-        } else {
-            printf("UART2 RX: 0x%02X\n", ch);
+        // 0x03 (Ctrl+C) 立即退出测试，保留已收数据。
+        if (ch == 0x03u) {
+            printf("\n[Recv] Exit requested (0x03)\n");
+            break;
         }
+
+        // 收到回车/换行即整行输出。
+        if (ch == '\r' || ch == '\n') {
+            if (line_len > 0) {
+                line_buf[line_len] = '\0';
+                printf("UART2 RX line #%u: \"%s\" (len=%u)\n",
+                       (u32)line_count, (const char *)line_buf,
+                       (u32)line_len);
+                line_count++;
+            } else {
+                printf("UART2 RX line #%u: <CR/LF only>\n",
+                       (u32)line_count);
+                line_count++;
+            }
+            line_len = 0;
+            continue;
+        }
+
+        // 退格：删除前一个字符（终端习惯）。
+        if (ch == 0x08u || ch == 0x7Fu) {
+            if (line_len > 0) {
+                line_len--;
+            }
+            continue;
+        }
+
+        // 其它控制字符丢弃，不进入缓冲区，避免后续格式串误读。
+        if (ch < 0x20u) {
+            continue;
+        }
+
+        if (line_len < UART2_RECV_LINE_MAX) {
+            line_buf[line_len++] = ch;
+        } else {
+            // 行缓冲满：立即 flush 一次，再把当前字符作为新行起点。
+            line_buf[line_len] = '\0';
+            printf("UART2 RX line #%u (overflow): \"%s\"\n",
+                   (u32)line_count, (const char *)line_buf);
+            line_count++;
+            line_len = 0;
+            line_buf[line_len++] = ch;
+        }
+
+        rx_count++;
     }
+
+    // 退出前 flush 残余数据。
+    if (line_len > 0) {
+        line_buf[line_len] = '\0';
+        printf("UART2 RX tail: \"%s\" (len=%u)\n",
+               (const char *)line_buf, (u32)line_len);
+    }
+    printf("[Recv] Total bytes: %u, total lines: %u\n",
+           (u32)rx_count, (u32)line_count);
+    while (1);
 }
 
 // ================================================================

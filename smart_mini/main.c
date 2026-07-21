@@ -54,7 +54,7 @@ extern void test_adkey_hold_run(void);
 // ---- UART：软/硬各一份，共用 PB2(TX)/PB1(RX)，一次只开一个 ----
 // #define TEST_UART_EN    1        // 硬件 UART2 回环 (跳线 PB2<->PB1)
 // #define TEST_UART_SEND_EN  1   // 硬件 UART2 持续发送 (PB2->USB-TTL)
-// #define TEST_UART_RECV_EN  1   // 硬件 UART2 持续接收 (USB-TTL->PB1)
+ #define TEST_UART_RECV_EN  1   // 硬件 UART2 持续接收 (USB-TTL->PB1)
 // #define TEST_UART_CONSOLE_EN 1  // 硬件 UART2 收发回显 + printf 重定向到 UART2 (PB2/PB1)
 // #define TEST_UART_SOFT_EN  1     // 软件 bit-bang UART 回环 (跳线 PB2<->PB1, 9600 8N1)
 // ---- SPI：软/硬共用 PE4=CS/PE6=CLK/PE7=MOSI/PE5=MISO，一次只开一个 ----
@@ -75,7 +75,7 @@ extern void test_adkey_hold_run(void);
 // #define TEST_ADKEY_MAP_EN      1
 // #define TEST_ADKEY_DEBOUNCE_EN 1
 // #define TEST_ADKEY_LONG_EN     1
-#define TEST_ADKEY_HOLD_EN     1
+//#define TEST_ADKEY_HOLD_EN     1
 
 AT(.com_rodata.exception)
 const char str_cpu_error[] = "ERR: %x, EPC: %x\n";
@@ -246,8 +246,9 @@ int main(void)
     PICCON |= 0x10003;                                  //LOW PRIO interrupt enable
 
     //Below is test code
-    /* 把 printf 重定向到 UART2 PB2@115200，从此往后 main.c 及所有 test_*_run() 里的 printf 都走 UART2 */
-    uart2_console_init();
+    /* 恢复初始化时把 printf 重定向回 UART0 (PB3 @ 1.5Mbps, 默认 uart_putchar)。
+       想临时切到 UART2 时再调 uart2_console_init() 即可。 */
+    my_printf_init(uart_putchar);
 
     printf("Hello SMART Flash MiniProj\n");
 
