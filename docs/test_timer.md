@@ -20,7 +20,6 @@ BT892X 有 Timer0~5：TMR0/1/2 仅 32 位定时（手册 §4.1），TMR3/4/5 还
 | **test_timer.c** | `smart_mini/test/test_timer.c` | TMR1 轮询精度 + 溢出中断 | 串口打印 err；用 TMR2 做基准 |
 | **test_timer_pwm.c** | `smart_mini/test/test_timer_pwm.c` | TMR3 三路 PWM（PB0/PB1/PB2） | 逻辑分析仪测周期/占空比 |
 
-> `test_timer_pwm.c` 自 `smart_mini_copilot` 移植，功能不变，仅入口改名 `test_timer_pwm_run()`。
 > ⚠️ **PWM 用 PB1/PB2，与 UART2(PB1/PB2) 冲突** → `TEST_TIMER_PWM_EN` 与 `TEST_UART_EN` 不能同开。
 
 ---

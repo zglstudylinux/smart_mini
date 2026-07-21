@@ -13,6 +13,8 @@
 				<Option compiler="riscv32" />
 				<Compiler>
 					<Add option="-g" />
+					<Add option="-DUART_MODE=1" />
+					<Add option="-DUART_RECV_MODE=2" />
 					<Add option="-DSPI_SW_W25_EXP=2" />
 				</Compiler>
 			</Target>
@@ -86,14 +88,6 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_spi_loop.h" />
-		<Unit filename="test/test_spi_wave.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="test/test_spi_wave.h" />
-		<Unit filename="test/test_spi_w25q64.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="test/test_spi_w25q64.h" />
 		<Unit filename="test/test_spi_soft_asm.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -102,6 +96,14 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_spi_timing.h" />
+		<Unit filename="test/test_spi_w25q64.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_w25q64.h" />
+		<Unit filename="test/test_spi_wave.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_wave.h" />
 		<Unit filename="test/test_timer.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -114,10 +116,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/test_uart.h" />
-		<Unit filename="test/test_uart_soft.c">
+		<Unit filename="test/uart_hal.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="test/test_uart_soft.h" />
+		<Unit filename="test/uart_hal.h" />
 		<Extensions>
 			<lib_finder disable_auto="1" />
 		</Extensions>

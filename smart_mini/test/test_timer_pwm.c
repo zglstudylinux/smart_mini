@@ -1,6 +1,6 @@
 /**
  * @file    test_timer_pwm.c
- * @brief   BT892X Timer3 PWM 输出测试（自 smart_mini_copilot 移植，功能不变）
+ * @brief   BT892X Timer3 PWM 输出测试
  *
  * 测试内容:
  *   Timer3 三路 PWM 同时输出，逻辑分析仪验证周期和占空比

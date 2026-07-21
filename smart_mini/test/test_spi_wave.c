@@ -42,6 +42,7 @@ static void run_soft_waveform(void)
     }
 }
 
+__attribute__((unused))
 static void run_hw_waveform(void)
 {
     printf("\n##### Phase 2: Hardware SPI1 Waveform #####\n");
