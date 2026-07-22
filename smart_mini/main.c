@@ -3,7 +3,6 @@
 #include "test/test_timer.h"
 #include "test/test_timer_pwm.h"
 #include "test/test_uart.h"
-#include "test/test_uart_soft.h"
 #include "test/test_spi_loop.h"
 #include "test/test_spi_wave.h"
 #include "test/test_spi_w25q64.h"
@@ -90,20 +89,21 @@ void exception_isr(void)
     while(1);
 }
 
+// 默认 printf 底层输出：轮询把一个字符从 UART0 发出（PB3 @ 1.5Mbps）
 AT(.com_text.uart)
 void uart_putchar(char ch)
 {
-    while (!(UART0CON & BIT(8)));
-    UART0DATA = ch;
+    while (!(UART0CON & BIT(8)));   // 等 TXPND(bit8)=1：发送缓冲空，可写下一字节
+    UART0DATA = ch;                 // 写 DATA 触发发送（写 DATA 自动清 TXPND）
 }
 
-//timer2 for delay function
+// Timer2 作为 1µs 自由运行计时基准（delay_us/delay_ms/tick_get 的时钟源）
 void timer2_init(void)
 {
-    TMR2CON = 0;                                            //select tmr_inc rising edge
-    TMR2PR = 0xfffffffful;
-    TMR2CNT = 0;
-    TMR2CON |= BIT(2) | BIT(0);                             //TMR2 Start
+    TMR2CON = 0;                    // 先停止（清 TMREN），准备配置
+    TMR2PR = 0xfffffffful;          // 最大周期，几乎不溢出 → 当作 32 位自由计数器
+    TMR2CNT = 0;                    // 计数清零
+    TMR2CON |= BIT(2) | BIT(0);     // INCSEL=01(计数 tmr_inc=1MHz 上升沿) + TMREN=1(启动)
 }
 
 AT(.com_text.timer)
@@ -163,21 +163,22 @@ void usb_disable(void)
     CLKGAT0 &= ~BIT(14);                    //close USB CLKGAT
 }
 
+// 把调试 printf 的 UART0 TX 从默认 PA7 改到 PB3（详见 docs/periph_uart.md 与 periph_gpio.md）
 void uart0_mapping_sel(void)
 {
-    //close UART0 default PA7 print
-    GPIOAPU  &= ~BIT(7);
-    GPIOAFEN &= ~BIT(7);                            //Port Function EN
-    GPIOADIR |= BIT(7);
-    GPIOADE  &= ~BIT(7);
-    FUNCMCON0 = (0xf << 12) | (0xf << 8);           //clear uart0 mapping
+    //关闭 UART0 默认的 PA7 打印引脚
+    GPIOAPU  &= ~BIT(7);                            // 关 PA7 上拉
+    GPIOAFEN &= ~BIT(7);                            // FEN=0：PA7 退出功能映射，回到普通 GPIO
+    GPIOADIR |= BIT(7);                             // DIR=1：设为输入（不再驱动）
+    GPIOADE  &= ~BIT(7);                            // DE=0：改为模拟态，彻底让出
+    FUNCMCON0 = (0xf << 12) | (0xf << 8);           // UT0RXMAP/UT0TXMAP=0xF：清除 UART0 旧映射
 
-    //USB PB3 print
-    GPIOBDE  |= BIT(3);
-    GPIOBPU  |= BIT(3);
-    GPIOBDIR |= BIT(3);
-    GPIOBFEN |= BIT(3);
-    FUNCMCON0 = (7 << 12) | (3 << 8);               //RX0 Map To TX0, TX0 Map to G3
+    //改用 PB3（USBDP 复用脚）做 UART0 TX 打印
+    GPIOBDE  |= BIT(3);                             // DE=1：数字 IO
+    GPIOBPU  |= BIT(3);                             // 上拉，空闲为高（UART 空闲电平）
+    GPIOBDIR |= BIT(3);                             // 方向位（功能映射下由外设接管，此处保留原逻辑）
+    GPIOBFEN |= BIT(3);                             // FEN=1：PB3 交给功能映射
+    FUNCMCON0 = (7 << 12) | (3 << 8);               // UT0RXMAP=7(由TX决定单线) + UT0TXMAP=3(TX0→G3=PB3)
 }
 
 void set_sys_clk(u32 sys_clk)
@@ -228,11 +229,11 @@ int main(void)
     LVDCON &= ~BIT(30);
     FUNCMCON0 = 0xff000000;                             //close unused UART1, UART2 mapping
     FUNCMCON1 = 0xffffffff;
-    CLKCON2 &= 0x00ffffff;
-    CLKCON2 |= (25 << 24);                              //configure x26m_div_clk = 1M (timer, ir, fmam use)
-    CLKCON0 &= ~(7 << 23);
-    CLKCON0 |= BIT(24);                                 //tmr_inc select x26m_div_clk = 1M
-    timer2_init();
+    CLKCON2 &= 0x00ffffff;                              //清 x26m 分频域高 8 位
+    CLKCON2 |= (25 << 24);                              //x26m_div_clk = 26M/26 = 1MHz (timer/ir/fmam 用)
+    CLKCON0 &= ~(7 << 23);                              //清 tmr_inc 时钟源选择域
+    CLKCON0 |= BIT(24);                                 //tmr_inc select x26m_div_clk = 1MHz（Timer 计数基准）
+    timer2_init();                                      //启动 1µs tick（依赖上面的 tmr_inc=1MHz）
     PWRCON0 |= BIT(20);                                 //PMU normal
     RTCCON3 |= BIT(0);                                  //VDDBT enable
 
