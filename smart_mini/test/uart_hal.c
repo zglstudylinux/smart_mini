@@ -101,28 +101,39 @@ u8 uart_hal_soft_getc(void)
 /* 同步发送+接收一个字节（loopback 专用）
  * 边发 TX 边在每 bit 中心采样 RX —— 这是真正能 loopback 的方式
  * 不要用 putc+getc 组合：putc 完线停在 stop HIGH，getc 等 start bit 永远不来
+ *
+ * ★ 关键修复：init() 默认把 PB2 设输入（避免双 driver 噪声），所以 txrx
+ *   第一件事必须把 DIR 切到输出，否则 GPIOBCLR 写到锁存器但不驱动引脚，
+ *   RX 端读到的是恒高，0xFF 全错。完事再切回输入保持默认。
  */
 u8 uart_hal_soft_txrx(u8 tx)
 {
     u8 i, rx = 0;
 
+    /* 切到输出驱动 TX —— 没这一步 GPIOBCLR 不出引脚 */
+    GPIOBDIR &= ~UART_TX_PIN;
+    GPIOBSET  = UART_TX_PIN;                  /* idle HIGH */
+
     /* start bit LOW */
     GPIOBCLR = UART_TX_PIN;
-    delay_us(SOFT_HALF_US);                  /* 延迟半位到中心采样（注意：start bit 中心仍为 LOW，不采样） */
-    delay_us(SOFT_HALF_US);                  /* 跨过整个 start bit */
+    delay_us(SOFT_HALF_US);                   /* 延迟半位到中心采样（注意：start bit 中心仍为 LOW，不采样） */
+    delay_us(SOFT_HALF_US);                   /* 跨过整个 start bit */
 
     /* 8 data bits, LSB-first —— 同步发+采 */
     for (i = 0; i < 8; i++) {
         if (tx & (1u << i)) GPIOBSET = UART_TX_PIN;
         else                GPIOBCLR = UART_TX_PIN;
-        delay_us(SOFT_HALF_US);              /* 延迟到 bit 中心 */
+        delay_us(SOFT_HALF_US);               /* 延迟到 bit 中心 */
         if (GPIOB & UART_RX_PIN) rx |= (1u << i);
-        delay_us(SOFT_HALF_US);              /* 跨过整个 bit */
+        delay_us(SOFT_HALF_US);               /* 跨过整个 bit */
     }
 
     /* stop bit HIGH */
     GPIOBSET = UART_TX_PIN;
-    delay_us(SOFT_HALF_US);                  /* stop bit 中心采样（应在 HIGH） */
+    delay_us(SOFT_HALF_US);                   /* stop bit 中心采样（应在 HIGH） */
+
+    /* 恢复 PB2 为输入（与 init 默认一致，避免与外接 RX 源双 driver 拉锯） */
+    GPIOBDIR |= UART_TX_PIN;
 
     return rx;
 }
@@ -186,9 +197,17 @@ void uart_hal_hw_putc(u8 tx)
 u8 uart_hal_hw_getc(void)
 {
     u8 ch;
+
+    /* ★ 防御性双清：万一上次残留 RXPND（init 后第一个字节、PC 突发、
+     *   上一轮 CPND 写被新到达覆盖等），先把 PND 清掉再等，
+     *   避免读到陈旧 DATA / 错过新字节。
+     *   §6.2 L421-428：写 UART2CPND bit9=1 清 RXPND。
+     */
+    UART2CPND = BIT(9);
+
     while (!(UART2CON & BIT(9)));   /* 等 RXIPND=1 */
     ch = (u8)UART2DATA;
-    UART2CPND = BIT(9);              /* ★ 显式清挂起（关键！） */
+    UART2CPND = BIT(9);              /* 读后再次清挂起，防止下一轮 while 误通过 */
     return ch;
 }
 
@@ -200,16 +219,15 @@ void uart_hal_console_init(u32 baud)
 {
     uart_hal_hw_init(baud);
 
-    /* ★ 诊断 banner 先用 UART0 打印（默认 putchar 已被 main() 注册）
-     *   告诉用户"现在 printf 要切到 UART2" → 后续所有 printf 经 UART2 输出
-     *   避免切走之后用户在 PB3 看不到任何东西
+    /* ★ 重定向 printf -> UART2 后再打印 banner，让 banner 出现在 PC 串口上
+     *   （用户在 console 测试场景下已经把 USB-TTL 接到 PB2/PB1，
+     *    UART0/PB3 通常没接，看不到 UART0 输出的 banner 会被误以为"卡死"）。
+     *   副作用：header 之后所有 printf（含 echo loop 内的）都从 UART2 出。
      */
+    my_printf_init(uart_hal_console_putchar);
     printf("\r\n===== BT892X UART2 Console (printf -> UART2) =====\r\n");
     printf("UART2: TX=PB2, RX=PB1, 115200bps 8N1\r\n");
     printf("Wiring: PB2->USB-TTL RX, PB1<-USB-TTL TX, GND-GND\r\n");
-
-    /* 重定向到 UART2 供 echo loop */
-    my_printf_init(uart_hal_console_putchar);
     printf("Type chars in PC serial monitor; they will be echoed back:\r\n");
 }
 

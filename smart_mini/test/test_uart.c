@@ -196,9 +196,7 @@ void test_uart2_recv_run(void)
 // ================================================================
 void test_uart2_console_run(void)
 {
-    uart_hal_console_init(115200);
-
-    printf("Type chars in PC serial monitor; they will be echoed back:\r\n");
+    uart_hal_console_init(115200);   // 已自带 banner，从 UART2/PB2 出
 
     while (1) {
         u8 ch = uart_hal_console_getc();   // 硬件 UART2 接收（验证收）
