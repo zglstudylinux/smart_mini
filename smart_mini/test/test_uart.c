@@ -126,6 +126,15 @@ void test_uart2_recv_run(void)
     while (1) {
         u8 ch = uart_hal_hw_getc();
 
+        /* ★ 每字节立即 echo:hex 字节 + 可显字符(不可显显示 '.')
+         *   这样发单个字节(hex send 工具)也能立刻看到反馈,不用等 Enter。
+         *   行模式用户照样能在 \r/\n 后看到 "UART2 RX line #N: ..." 整行汇总。*/
+        if (ch >= 0x20u && ch < 0x7Fu) {
+            printf("RX[%03u] 0x%02X '%c'\n", (u32)rx_count, ch, ch);
+        } else {
+            printf("RX[%03u] 0x%02X\n", (u32)rx_count, ch);
+        }
+
         // 0x03 (Ctrl+C) 立即退出测试，保留已收数据。
         if (ch == 0x03u) {
             printf("\n[Recv] Exit requested (0x03)\n");
