@@ -1,12 +1,12 @@
 # BT892X UART HAL 重构 + 软硬件双路 Sub-phase 报告
 
-> **状态**：完整代码、文档（5 步重构）写完，**未 commit+push**。待用户决定 push 策略后处理（可能有 GitHub 冲突要解决）。
-> **测试结果**：
-> - ✅ Phase 1 LOOP：256 字节软+硬双路回环 PASSED
-> - ✅ Phase 1b LOOP_CONT：软+硬持续 0x55 + 每秒 printf
-> - ✅ Phase 2 SEND：软+硬 0xAA *10 *10 轮
-> - 🟡 Phase 3 RECV：可读出字符（噪声消除），但位时序有 1-2 bit 偏移（详见 §6 RECV 已知问题）
-> - ✅ Phase 4 CONSOLE：printf 重定向 + 回显
+> **状态**：**已 commit + push**。代码合入 commit `629ed39` "test(uart): drop duplicate init/putc/getc in test_uart.c; route tests via uart_hal"。后续 3 个 fix commit 在此基础上叠：commit `940e728`（soft_txrx DIR + RXPND 双清 + console banner），commit `acfb23e`（per-byte echo）。
+> **当前测试矩阵**（HEAD `acfb23e`）：5 个入口全部测过。
+> - ✅ TEST_UART_EN（硬件回环 256/256）
+> - ✅ TEST_UART_SEND_EN（硬件发送）
+> - ✅ TEST_UART_RECV_EN（硬件接收 per-byte echo + 行汇总；**已知丢字节**，详见 §6 与 [test_uart_ringbuf.md](test_uart_ringbuf.md)）
+> - ✅ TEST_UART_CONSOLE_EN（硬件 console + printf 重定向）
+> - ✅ TEST_UART_SOFT_EN（软 bit-bang 256/256 PASSED；外部 PC 接收仍有 1-2 bit 偏移）
 
 ---
 
@@ -27,30 +27,29 @@
 
 - 抽 HAL 公共层（`uart_hal.h/.c`）消除重复
 - 拆 `soft_uart_txrx` 为独立 `putc`/`getc` + 同步 `txrx`
-- 加 `UART_MODE` 单宏控制 5 个测试的 sub-phase（0=双路/1=只软/2=只硬）
+- 删除冗余 `test_uart_soft.c/.h` 独立文件（与 LOOP 双路重复），软路入口 `test_uart_soft_run` 移入 `test_uart.c`
 - 5 步实施，每步用户实测通过才进下一步
-- 删除冗余 `test_uart_soft_run`（与 LOOP 双路重复）
 
 ## §3 五步实施
 
 ### Step 1：基础 HAL 创建 + test_uart_run 双路
-- **新建** `test/uart_hal.h`（5 类接口）+ `test/uart_hal.c`（带手册 §3.2/§3.3/§6.2 注释）
-- **重构** `test_uart_run`（软+硬双路回环 + sub-phase 宏 `UART_LOOP_MODE`）
+- **新建** `test/uart_hal.h`（3 类接口：软 4 / 硬 3 / console 3 = 10 个函数）+ `test/uart_hal.c`（带手册 §3.2/§3.3/§6.2 注释）
+- **重构** `test_uart_run`（软+硬双路回环）
 - **bug 1**：用户原版 `test_uart_run` 在 LOOP 软路能跑（PB2↔PB1 跳线），但加 dual 后有 sub-phase 默认 0 双路
 
-### Step 2：SUB-PHASE 宏（UART_LOOP_MODE / UART_SEND_MODE / UART_RECV_MODE）
-- 初期 3 个宏（每测试一个）→ 用户反馈"切换测试要改 2 个地方太烦"
-- **简化**：合并为 1 个 `UART_MODE` 宏（0=双路/1=只软/2=只硬），5 个测试共用
+### Step 2：测试入口组装
+- 初期 3 个 SUB-PHASE 宏（UART_LOOP_MODE / UART_SEND_MODE / UART_RECV_MODE）→ 用户反馈"切换测试要改 2 个地方太烦"
+- **简化**：合并为单宏控制；后续 commit `629ed39` 进一步精简——5 个测试用 5 个独立 `TEST_UART_*_EN` 宏，删 SUB-PHASE 宏
 
 ### Step 3：修复 printf 重定向"不释放"问题
 - **bug 2**：`my_printf_init(console_putchar)` 改写了 ROM 函数指针后不释放，**完全断电 30 秒**才能 reset
-- **修法**：在 `uart_hal_hw_init` / `uart_hal_soft_init` / `test_uart2_loop_continuous_run` 函数入口都加 `my_printf_init(uart_putchar)` 复位到 UART0
+- **修法**：在 `uart_hal_hw_init` / `uart_hal_soft_init` 函数入口都加 `my_printf_init(uart_putchar)` 复位到 UART0
 - **bug 3**：`my_printf_init` 在 main.c 启动时未调用（boot ROM 默认函数指针为 0），所以 "Hello SMART Flash MiniProj" 不显示
 - **修法**：`main()` 在 UART0 硬件 ready 后、首次 `printf` 之前加 `my_printf_init(uart_putchar)` 一行
 
 ### Step 4：拆 `soft_uart_txrx` 为独立 putc/getc
 - 用户发现 TX 完成和 RX 等待不同步：`soft_putc` 完线停在 stop HIGH，`soft_getc` 等 start bit 永远不来
-- **修法**：新增 `soft_uart_soft_txrx`（loopback 专用，同步发+采）
+- **修法**：新增 `uart_hal_soft_txrx`（loopback 专用，同步发+采）
 - `soft_uart_init` 不再默认输出 PB2（避免与外接 RX 源冲突）
 - `soft_putc` 临时设 PB2 输出，发送完恢复输入
 
@@ -60,7 +59,23 @@
 - **修法**：调试 printf 直接打印每位采样值，发现：
   - 旧 init 把 PB2 设为输出 idle HIGH → 还在接跳线时和 PC 端 TX 拉 LOW 冲突 → 双 driver 拉锯产生噪声
   - 改 `soft_init` 默认 PB1/PB2 都设输入+上拉，`soft_putc` 临时设 PB2 输出
-- 噪声消除后，剩下 1-2 bit 偏移（详见 §6 已知问题）
+- 噪声消除后，剩下 1-2 bit 偏移（详见 §6 已知问题，仅限**软** UART 外部 PC 接收）
+
+### Step 6（commit `629ed39`）：删重复 + 走 HAL
+- `test_uart.c` 的 `uart2_test_init / putc / getc / console_init / console_putchar` 全部删除
+- `test_uart.c` 的 5 个 `test_uart*_run` 入口改为直接调 `uart_hal_*`
+- `test_uart_soft.c/.h` 独立文件删除，软路 `test_uart_soft_run` 并入 `test_uart.c`
+- `app.cbp` 移除 `test_uart_soft` Unit
+- **结果**：消除 ~300 行重复代码；5 个测试入口统一走 HAL
+
+### Step 7（commit `940e728`）：bug 修复
+- `uart_hal_soft_txrx` 漏切 DIR=输出，修复：进入函数 `DIR &= ~TX` + `SET idle HIGH`，末尾 `DIR |= TX` 恢复
+- `uart_hal_hw_getc` 加防御性双清 RXPND（前后各一次）
+- `uart_hal_console_init` banner 改到 `my_printf_init` 之后打印（用户在 PB2 上能看到）
+
+### Step 8（commit `acfb23e`）：per-byte echo
+- `test_uart2_recv_run` 每字节立即 echo `RX[NNN] 0xXX 'C'`，方便 hex send 工具不发 Enter 也能看到反馈
+- **副作用**：把 printf 耗时放大，115200 baud 下 PC 突发 ≥ 3 字节被覆盖丢失——新发现一类问题，详见 [test_uart_ringbuf.md](test_uart_ringbuf.md)
 
 ## §4 最终架构
 
@@ -74,7 +89,7 @@ smart_mini/test/
 └── (test_uart_soft.c/.h   [删除] 与 LOOP 软路重复)
 ```
 
-### §4.2 uart_hal 接口总览
+### §4.2 uart_hal 接口总览（HEAD `acfb23e`）
 
 ```c
 // 引脚宏
@@ -85,54 +100,59 @@ smart_mini/test/
 void uart_hal_soft_init(u32 baud);   // 默认 PB1/PB2 输入+上拉
 void uart_hal_soft_putc(u8 tx);      // 临时设 PB2 输出
 u8   uart_hal_soft_getc(void);      // 阻塞等 start bit+采样
-u8   uart_hal_soft_txrx(u8 tx);      // loopback 专用：同步发+采
+u8   uart_hal_soft_txrx(u8 tx);      // loopback 专用：同步发+采（dir 切输出）
 
 // 硬件 UART2 原语（G2 = PB2/PB1, 115200 8N1）
-void uart_hal_hw_init(u32 baud);
+void uart_hal_hw_init(u32 baud);     // 含显式 RXPND 清 + printf 还原
 void uart_hal_hw_putc(u8 tx);
-u8   uart_hal_hw_getc(void);
+u8   uart_hal_hw_getc(void);         // 防御性双清 RXPND
 
 // Console / printf 重定向层
-void uart_hal_console_init(u32 baud);
-void uart_hal_console_putchar(char ch);   // 供 my_printf_init 注册
+void uart_hal_console_init(u32 baud);          // banner 全走 UART2
+void uart_hal_console_putchar(char ch);         // 供 my_printf_init 注册
 u8   uart_hal_console_getc(void);
 ```
 
-### §4.3 4 个测试入口
+> **未来扩展**（设计已写，代码未合入）：`uart_hal_hw_int_*` 中断驱动 RX 路径解决 115200 burst 丢字节——见 [test_uart_ringbuf.md](test_uart_ringbuf.md)。
 
-| 测试 | 软硬件支持 | sub-phase 宏 |
+### §4.3 5 个测试入口（HEAD `acfb23e`）
+
+| 测试 | 软硬件 | 开关宏 |
 |---|---|---|
-| `test_uart_run` (LOOP 256 字节) | ✅ 软+硬 | `UART_MODE` |
-| `test_uart2_send_run` (10 轮 *10 字节) | ✅ 软+硬 | `UART_MODE` |
-| `test_uart2_recv_run` (16 字节) | ✅ 软+硬 | `UART_MODE` |
-| `test_uart2_loop_continuous_run` (持续 0x55) | ✅ 软+硬 | `UART_MODE` |
-| `test_uart2_console_run` (printf 重定向+回显) | ❌ 仅硬 | — |
+| `test_uart_run` (LOOP 256 字节) | 硬 | `TEST_UART_EN` |
+| `test_uart2_send_run` (持续 `[N] Hello UART2!`) | 硬 | `TEST_UART_SEND_EN` |
+| `test_uart2_recv_run` (per-byte echo + 行汇总) | 硬 | `TEST_UART_RECV_EN` |
+| `test_uart2_console_run` (printf 重定向 + 回显) | 硬 | `TEST_UART_CONSOLE_EN` |
+| `test_uart_soft_run` (软 bit-bang LOOP 256 字节) | **软** | `TEST_UART_SOFT_EN` |
 
-### §4.4 删除冗余
+> 注意：本节"软+硬"含义为"`test_uart_run` 旧版本能跑软+硬"，HAL 重构后每个入口只跑一种硬件路径（`UART_MODE` sub-phase 宏已删除）。如果未来需要"一次烧测两种硬件"，重新引入 `UART_MODE` 即可。
 
-- `test_uart_soft_run`（`test_uart_soft.c/.h`）删除：与 LOOP 软路完全重复
-- main.c 移除 include / extern / dispatch
-- app.cbp 移除 2 个 Unit entries
+### §4.4 删除冗余（commit `629ed39`）
 
-## §5 main.c 关键修改
+- `test_uart_soft.c/.h` 删除（独立文件）：与 LOOP 软路重复，软路入口 `test_uart_soft_run` 并入 `test_uart.c`
+- `test_uart.c` 自己的 `uart2_test_init / putc / getc / console_init / console_putchar` 删除：改用 `uart_hal_*`
+- main.c 移除重复 include / extern / dispatch
+- app.cbp 移除 `test_uart_soft` Unit
+
+## §5 main.c 关键修改（commit `629ed39`）
 
 ```c
 // main() 中：UART0 硬件 ready 后、首次 printf 之前
 my_printf_init(uart_putchar);  // ROM 默认函数指针为 0，必须显式 init
 
 // 5 个测试开关（每次烧一个）
-// #define TEST_UART_LOOP_EN     1   // 跳线 PB2<->PB1 — 软+硬
-// #define TEST_UART_LOOP_CONT_EN 1  // 持续回环 0x55 + printf
-// #define TEST_UART_SEND_EN     1   // 持续发送
-// #define TEST_UART_RECV_EN     1   // 持续接收
-// #define TEST_UART_CONSOLE_EN  1   // 回显+printf 重定向
-// #define TEST_UART_SOFT_EN     1   // 已删除（与 LOOP 重复）
-
-// Sub-phase（一个宏控制 5 个测试）
-// #define UART_MODE 0   // 0=双路 / 1=只软 / 2=只硬
+// #define TEST_UART_EN         1   // 跳线 PB2<->PB1 — 硬件回环
+// #define TEST_UART_SEND_EN    1   // 硬件持续发送
+// #define TEST_UART_RECV_EN    1   // 硬件接收（轮询）
+// #define TEST_UART_CONSOLE_EN 1   // 硬件回显+printf 重定向
+// #define TEST_UART_SOFT_EN    1   // 软 bit-bang 回环
 ```
 
-## §6 已知问题：Phase 3 RECV 位时序偏移
+> **注意**：`test_uart_soft_run` 在 HAL 重构后**保留**（在 `test_uart.c` 内），与上面旧版"已删除（与 LOOP 重复）"描述矛盾——以本文 §4.3 表格为准。`UART_MODE` sub-phase 宏也已在 commit `629ed39` 删除，每个测试入口只跑一种硬件路径。
+
+## §6 已知问题：软 UART 外部 PC 接收位时序偏移
+
+> **适用范围**：**仅限**软 bit-bang UART 与外部 PC 通信。硬件 UART2 走 Fsys 24MHz 采样，baud 误差 < 0.2%，无此问题（115200 burst 丢字节另有原因，见 [test_uart_ringbuf.md](test_uart_ringbuf.md)）。
 
 ### §6.1 现象
 
@@ -178,13 +198,16 @@ my_printf_init(uart_putchar);  // ROM 默认函数指针为 0，必须显式 ini
 
 ## §7 Step-by-step 实施记录
 
-| Step | 改动 | 关键文件 | 用户测试 |
+| Step / Commit | 改动 | 关键文件 | 用户测试 |
 |---|---|---|---|
 | 1 | 创建 HAL + LOOP 双路 | `uart_hal.{h,c}`, `test_uart.c` | ✅ 256 字节 PASSED |
 | 2 | SUB-PHASE 宏合并为 1 个 `UART_MODE` | `test_uart.c`, `main.c` | ✅ 改 1 行全测试 |
 | 3 | 修 printf 重定向"不释放" + 加 my_printf_init 到 main() | `main.c`, `test_uart.c` | ✅ |
 | 4 | 拆 `soft_uart_txrx` + 默认 PB2 输入 | `uart_hal.c`, `test_uart.c` | ✅ LOOP 双路 |
-| 5 | RECV bug 修噪声 + 删除冗余 | `uart_hal.c`, `main.c`, `test_uart_soft.{c,h}`, `app.cbp` | ✅ 噪声消，剩 0xA1 偏移 |
+| 5 | RECV bug 修噪声 | `uart_hal.c`, `main.c` | ✅ 噪声消，剩 0xA1 偏移 |
+| 6 (`629ed39`) | 删 `test_uart.c` 重复函数 + `test_uart_soft.c/.h` 删除 → `test_uart_soft_run` 并入 `test_uart.c`；5 个入口走 HAL | `test_uart.{h,c}`, `test/uart_hal.{h,c}`, `main.c`, `app.cbp` | ✅ 全部 5 个测试入口 PASSED |
+| 7 (`940e728`) | soft_txrx DIR 切输出 / RXPND 双清 / console banner 切 UART2 | `test/uart_hal.c` | ✅ SOFT 256/256 + CONSOLE 回显 |
+| 8 (`acfb23e`) | RECV per-byte echo（暴露 115200 burst 丢字节）| `test/test_uart.c` | ✅ echo 工作；⚠️ burst 丢字节（见 [test_uart_ringbuf.md](test_uart_ringbuf.md)） |
 
 ## §8 关键代码片段
 
@@ -280,38 +303,41 @@ int main(void)
 
 ## §10 验证与已知限制
 
-### §10.1 验证清单
+### §10.1 验证清单（HEAD `acfb23e`）
 
-- [x] LOOP 软+硬 256 字节回环
-- [x] LOOP_CONT 软+硬 持续 0x55
-- [x] SEND 软+硬 10 轮 *10 字节
-- [x] RECV 软+硬能收到字符（噪声消除，但位时序偏移）
-- [x] CONSOLE 硬：printf 重定向 + 回显
+- [x] TEST_UART_EN 硬件回环 256 字节 (`Total: 256, Errors: 0`)
+- [x] TEST_UART_SEND_EN 硬件持续发送（PC 串口助手正常收到 `[N] Hello UART2!`）
+- [x] TEST_UART_RECV_EN 硬件接收（per-byte echo + 行汇总；⚠️ 115200 burst 丢字节——见 [test_uart_ringbuf.md](test_uart_ringbuf.md) 设计）
+- [x] TEST_UART_CONSOLE_EN 硬件 console（printf 重定向 + 键入字符回显）
+- [x] TEST_UART_SOFT_EN 软 bit-bang 回环 256 字节 PASSED（外部 PC 接收仍有 1-2 bit 偏移——见 §6 已知问题）
 
 ### §10.2 已知限制
 
-1. RECV 位时序偏移（§6）—— PC 端问题，未修
-2. SPI HAL 阶段的 ROM stub one-shot 假设未修（已记录在 test_spi_hal_refactor.md）
-3. 需完全断电 30s 才能重置 my_printf_init 的 redirect
+1. **RECV 115200 burst 丢字节**——commit `acfb23e` per-byte echo 暴露。设计文档 [test_uart_ringbuf.md](test_uart_ringbuf.md) 已写（ISR+ringbuf 方案），代码未合入。
+2. **软 UART 外部 PC 接收 1-2 bit 偏移**（§6）—— PC 端时序问题，未修；**不影响**内部 loopback（LOOP 256/256 PASSED）。
+3. SPI HAL 阶段的 ROM stub one-shot 假设未修（已记录在 test_spi_hal_refactor.md）。
 
-## §11 下一步
+## §11 状态
 
 按用户指示：
-- **先完善本文档**（当前完成）
-- **不 commit+push**（待用户决定 push 策略）
-- 后续模块 5（I2C）和收尾删除 smart_mini_copilot/ 还需要处理
-- ✅ smart_mini_copilot/ 已删除（2026-07-17 收尾清理）
+- **已 commit + push**（commit `629ed39` 主体 + `940e728` / `acfb23e` 后续修复）
+- 后续测试矩阵保持 5 个独立 `TEST_UART_*_EN` 开关，每次烧一个
 
-## §12 文件清单（本次重构）
+## §12 文件清单（HAL 重构 + 后续修复累计）
 
-| 文件 | 状态 | 行数变化 |
+| 文件 | 状态 | 变化 |
 |---|---|---|
-| `test/uart_hal.h` | 新建 | +70 |
-| `test/uart_hal.c` | 新建 | +250 |
-| `test/test_uart.c` | 重构 | 5 测试入口调 HAL |
-| `test/test_uart_soft.c` | 删除 | -100 |
-| `test/test_uart_soft.h` | 删除 | -20 |
-| `main.c` | 修改 | -5（删 include/extern/dispatch）+1（加 my_printf_init） |
-| `app.cbp` | 修改 | -2（删 test_uart_soft Unit） |
+| `test/uart_hal.h` | 新建 | +10 个 HAL 原语声明 |
+| `test/uart_hal.c` | 新建 | +~250 行 HAL 实现 |
+| `test/test_uart.c` | 重构 | 5 测试入口调 HAL；per-byte echo |
+| `test/test_uart.h` | 重构 | 5 入口声明 |
+| `test/test_uart_soft.c` | 删除 | -100 行 |
+| `test/test_uart_soft.h` | 删除 | -20 行 |
+| `main.c` | 修改 | 删重复 include/extern/dispatch；加 my_printf_init；加 5 个 TEST_UART_*_EN 开关 |
+| `app.cbp` | 修改 | 删 test_uart_soft Unit |
+| `docs/periph_uart.md` | 修订 | 多处代码行号与函数引用同步到 HAL 重构后状态 |
+| `docs/test_uart.md` | 修订 | per-byte echo §2.9 + 115200 burst 已知问题 |
+| `docs/test_uart_hal_refactor.md` | 修订 | 本文档；累计 8 步 |
+| `docs/test_uart_ringbuf.md` | 新建（设计文档）| ISR+ringbuf 方案，代码待用户测试通过后合入 |
 
-总计：**5 步重构 + 5 个 bug 修复 + 1 个测试冗余删除**。
+总计：**5 步 HAL 重构 + 3 个 fix commit + 4 篇文档维护 + 1 篇设计文档**。

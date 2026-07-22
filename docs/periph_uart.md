@@ -17,10 +17,10 @@ BT892X 内部集成 **3 路全双工 UART 控制器**（UART0 / UART1 / UART2，
 
 | 层 | 实现 | 路径 | 作用 |
 |:---|:---|:---|:---|
-| **应用入口** | 4 个 `TEST_UART_*_EN` 宏 | `smart_mini/main.c` L52–58, L280–294 | 一次性选择要跑的测试入口（loop / send / recv / console） |
-| **测试层（裸版本）** | `uart2_test_init / putc / getc / console_init` | `smart_mini/test/test_uart.c` | 早期直接写寄存器的实现；4 个 `test_uart*_run` 入口 |
-| **HAL 抽象层（重构版）** | `uart_hal_soft_* / uart_hal_hw_* / uart_hal_console_*` | `smart_mini/test/uart_hal.{h,c}` | 把软件 bit-bang 与硬件 UART2 抽出 9 个原语，重复实现统一在 HAL |
-| **printf 重定向** | `my_printf_init`（ROM 0x8401c）+ `uart_putchar` | `smart_mini/main.c` L92–97, L250；`smart_mini/reset.S` L128；`smart_mini/header/clib.h` L10 | 默认走 UART0/PB3@1.5Mbps 调试串口；可切到 UART2 |
+| **应用入口** | 5 个 `TEST_UART_*_EN` 宏 | `smart_mini/main.c` L53–60, L282–299 | 一次性选择要跑的测试入口（loop / send / recv / console / soft） |
+| **测试层** | `test_uart_run / test_uart2_send_run / test_uart2_recv_run / test_uart2_console_run / test_uart_soft_run` | `smart_mini/test/test_uart.c` | 5 个测试入口，全部走 HAL，不重复实现寄存器层 |
+| **HAL 抽象层** | `uart_hal_soft_* / uart_hal_hw_* / uart_hal_console_*` | `smart_mini/test/uart_hal.{h,c}` | 抽出 10 个原语（软 4 + 硬 3 + console 3），所有 init/putc/getc 统一在 HAL |
+| **printf 重定向** | `my_printf_init`（ROM 0x8401c）+ `uart_putchar` | `smart_mini/main.c` L94–98, L252；`smart_mini/reset.S` L128；`smart_mini/header/clib.h` L10 | 默认走 UART0/PB3@1.5Mbps 调试串口；可切到 UART2 |
 
 > **重要历史背景**：本工程原本使用 `UART1(PA6/PA7 G1)`，但因该口在开发板上物理损坏，**整体迁移到 `UART2(PB1/PB2 G2)`**。该决定同时体现在 `test_uart.c` 头注释 L10–11 与 `test_uart.md` §0 “整体换成 UART2(PB1/PB2 G2)”。
 
@@ -39,16 +39,17 @@ BT892X 内部集成 **3 路全双工 UART 控制器**（UART0 / UART1 / UART2，
 | `header/sfr.h` | 所有 UART/GP/FUNCMCON 寄存器宏定义（UART0 L54–57、UART1 L88–91、UART2 L571–574、GPIOB L436–448、FUNCMCON0 L44、FUNCMCON1 L45） |
 | `header/clib.h` | `my_printf_init` 函数声明（L10） |
 | `reset.S` | ROM stub `.set 0x8401c`（L128） |
-| `main.c` | 启动、`uart_putchar`（L92–97）、`uart0_mapping_sel`（L165–180）、`set_sys_clk`（L182–220）、`TEST_UART_*_EN` 开关（L52–58）与分发（L280–294） |
-| `test/test_uart.c` | 4 个硬件 UART2 测试入口 + `uart2_console_init` |
-| `test/test_uart.h` | 4 个入口声明 + `uart2_console_init` 声明 |
-| `test/uart_hal.c` | HAL 实现：软件 bit-bang + 硬件 UART2 + Console/printf 抽象 |
+| `main.c` | 启动、`uart_putchar`（L93–98）、`uart0_mapping_sel`（L167–182）、`set_sys_clk`（L184–222）、`TEST_UART_*_EN` 开关（L53–60）与分发（L282–299） |
+| `test/test_uart.c` | 5 个测试入口（loop / send / recv / console / soft）—— 全部走 HAL，不重复实现寄存器 |
+| `test/test_uart.h` | 5 个入口声明 |
+| `test/uart_hal.c` | HAL 实现：软 4 + 硬 3 + console 3 = 10 个原语 |
 | `test/uart_hal.h` | HAL 接口声明 + `UART_TX_PIN=UART_RX_PIN=` `BIT(2)/BIT(1)` |
 | `test/test_common.h` | `BIT()` 宏、`delay_us` 等基础工具（被 HAL 依赖） |
 | `docs/BT892X_UserManual_Driver.md` | §3.2 GPIO、§3.3 FUNCMCON1、§6 UART 主参考 |
 | `docs/bt892x_pinfunction.md` | §4.2 PORTB、§5.1 UART2 引脚表 |
 | `docs/test_uart.md` | 实测报告（2026-07-17 / 07-20 / 07-21 三次更新） |
 | `docs/test_uart_hal_refactor.md` | HAL 重构 5 步记录（2026-07-17） |
+| `docs/test_uart_ringbuf.md` | **设计文档**：UART2 中断 + 环形缓冲（解决 115200 burst 丢字节），代码未合入 |
 
 ---
 
@@ -148,10 +149,10 @@ BT892X 内部集成 **3 路全双工 UART 控制器**（UART0 / UART1 / UART2，
 |:---|:---|:---|:---|:---|
 | `FUNCMCON1[7:4] UT2TXMAP` | UART2 TX 映射 Group | **2** | 选 G2 → PB2 | `uart_hal.c` L141, `test_uart.c` L24 |
 | `FUNCMCON1[11:8] UT2RXMAP` | UART2 RX 映射 Group | **2** | 选 G2 → PB1 | 同上 |
-| `FUNCMCON0[11:8] UT0TXMAP` | UART0 TX 映射 Group | **3** | 选 G3 → PB3 | `main.c` L179 `FUNCMCON0=(7<<12)|(3<<8)` |
-| `FUNCMCON0[15:12] UT0RXMAP` | UART0 RX 映射 Group | **7** | 选 G7 = 与 TX 同脚（单线模式需 ONELINE=1） | `main.c` L179 |
+| `FUNCMCON0[11:8] UT0TXMAP` | UART0 TX 映射 Group | **3** | 选 G3 → PB3 | `main.c` L181 `FUNCMCON0=(7<<12)|(3<<8)` |
+| `FUNCMCON0[15:12] UT0RXMAP` | UART0 RX 映射 Group | **7** | 选 G7 = 与 TX 同脚（单线模式需 ONELINE=1） | `main.c` L181 |
 
-> **注**：手册 §3.3 L165 与 `bt892x_pinfunction.md` §3 L82 都说"when RXMAP=0x7, TX pin will map to RX"——即 RXMAP=0x7 让 TX 复用 RX 单线工作。本工程 `UART0CON` 没有设 `ONELINE`（bit 6），所以 PB3 只是单向 TX（不需要 RX），详见 `main.c` L165–180 `uart0_mapping_sel`。
+> **注**：手册 §3.3 L165 与 `bt892x_pinfunction.md` §3 L82 都说"when RXMAP=0x7, TX pin will map to RX"——即 RXMAP=0x7 让 TX 复用 RX 单线工作。本工程 `UART0CON` 没有设 `ONELINE`（bit 6），所以 PB3 只是单向 TX（不需要 RX），详见 `main.c` L167–182 `uart0_mapping_sel`。
 
 ### 3.3 引脚冲突与约束（关键）
 
@@ -215,205 +216,167 @@ BT892X 内部集成 **3 路全双工 UART 控制器**（UART0 / UART1 / UART2，
 
 ## 5. 初始化操作步骤
 
-下面以 `test_uart.c` 的 `uart2_test_init`（L20–50）为例，编号 step-by-step。`uart_hal_hw_init`（L137–177）步骤完全相同，差异在末尾多了**显式清 RXPND 循环**与 **printf 还原**。
+`test_uart.c` 在 HAL 重构后已不持有 init 函数本体——所有 5 个测试入口调 `uart_hal_hw_init` / `uart_hal_soft_init`。下面以 **`uart_hal_hw_init`**（`uart_hal.c` L137–177）为权威参考，编号 step-by-step。
 
 | Step | 寄存器操作 | 含义 / 手册依据 |
 |:---|:---|:---|
-| **1. 时钟准备** | 由 `set_sys_clk(SYS_24M)`（`main.c` L241）完成 | 把系统切到 24 MHz（SPLL）；不属 UART 自身 init，但 UART 波特率假设此前提 |
-| **2. 关闭 boot ROM 默认映射** | `FUNCMCON0 = 0xff000000; FUNCMCON1 = 0xffffffff;`（`main.c` L228–229） | 复位所有复用 Group，避免与 boot ROM 默认配置冲突 |
-| **3. 选 Group** | `FUNCMCON1 &= ~((0xF<<4)\|(0xF<<8)); FUNCMCON1 \|= (2<<4)\|(2<<8);`（`test_uart.c` L23–24） | §3.3：UT2TXMAP=2、UT2RXMAP=2 → G2 → PB2/PB1 |
-| **4. PB2 → UART2 TX** | `GPIOBFEN \|= BIT(2); GPIOBDE \|= BIT(2); GPIOBDIR &= ~BIT(2); GPIOBPU \|= BIT(2);`（L27–30） | §3.2：FEN=1（功能 IO）/ DE=1（数字）/ DIR=0（输出）/ PU=1（10K 上拉） |
-| **5. PB1 → UART2 RX** | `GPIOBFEN \|= BIT(1); GPIOBDE \|= BIT(1); GPIOBDIR \|= BIT(1); GPIOBPU \|= BIT(1);`（L33–36） | §3.2：DIR=1（输入），其余同上 |
-| **6. 配波特率** | `u32 baud_val = 207; UART2BAUD = (207<<16)\|207;`（L39–40） | §6.2：TX/RX 同 divisor；24 MHz → 115200 |
-| **7. 使能 + 接收使能** | `UART2CON = BIT(7)\|BIT(0);`（L43） | §6.2：UTEN=1 + RXEN=1 |
-| **8. 稳定延时** | `delay_ms(10);`（L44） | 工程经验：等 UART 时钟稳定 |
-| **9. 冲洗 RX** | `while (UART2CON & BIT(9)) (void)UART2DATA;`（L47–49） | §6.2：使能后可能有毛刺，读 DATA 自动清 TXPND 但**不清** RXPND，所以 HAL 版多一句 `UART2CPND=BIT(9)`（`uart_hal.c` L169） |
-| **10. printf 还原**（仅 HAL 版） | `my_printf_init(uart_putchar);`（`uart_hal.c` L47, L176） | 防 `console` 测试残留导致 printf 走到非 UART0 |
-
-HAL 版完整步骤在 `uart_hal.c` L137–177，对照上述 10 步多出第 10 步并在第 9 步加上显式 `UART2CPND=BIT(9)`。
+| **1. 时钟准备** | 由 `set_sys_clk(SYS_24M)`（`main.c` L243）完成 | 把系统切到 24 MHz（SPLL）；不属 UART 自身 init，但 UART 波特率假设此前提 |
+| **2. 关闭 boot ROM 默认映射** | `FUNCMCON0 = 0xff000000; FUNCMCON1 = 0xffffffff;`（`main.c` L230–231） | 复位所有复用 Group，避免与 boot ROM 默认配置冲突 |
+| **3. 选 Group** | `FUNCMCON1 &= ~((0xF<<4)\|(0xF<<8)); FUNCMCON1 \|= (2<<4)\|(2<<8);`（`uart_hal.c` L140–141） | §3.3：UT2TXMAP=2、UT2RXMAP=2 → G2 → PB2/PB1 |
+| **4. PB2 → UART2 TX** | `GPIOBFEN \|= UART_TX_PIN; GPIOBDE \|= UART_TX_PIN; GPIOBDIR &= ~UART_TX_PIN; GPIOBPU \|= UART_TX_PIN;`（`uart_hal.c` L144–147） | §3.2：FEN=1（功能 IO）/ DE=1（数字）/ DIR=0（输出）/ PU=1（10K 上拉） |
+| **5. PB1 → UART2 RX** | `GPIOBFEN \|= UART_RX_PIN; GPIOBDE \|= UART_RX_PIN; GPIOBDIR \|= UART_RX_PIN; GPIOBPU \|= UART_RX_PIN;`（`uart_hal.c` L150–153） | §3.2：DIR=1（输入），其余同上 |
+| **6. 配波特率** | `u32 baud_val = (24000000 + baud/2)/baud - 1; UART2BAUD = (baud_val<<16)\|baud_val;`（`uart_hal.c` L159–160） | §6.2：TX/RX 同 divisor；24 MHz → 115200（baud_val=207）|
+| **7. 使能 + 接收使能** | `UART2CON = BIT(7)\|BIT(0);`（`uart_hal.c` L163） | §6.2：UTEN=1 + RXEN=1 |
+| **8. 稳定延时** | `delay_ms(10);`（`uart_hal.c` L164） | 工程经验：等 UART 时钟稳定 |
+| **9. 冲洗 RX** | `while (UART2CON & BIT(9)) { (void)UART2DATA; UART2CPND = BIT(9); }`（`uart_hal.c` L167–170） | §6.2：使能后可能有毛刺；显式清 RXPND（HAL 版比早期多了 `UART2CPND = BIT(9)`，否则残留 PND 会让下次 getc 误读）|
+| **10. printf 还原** | `my_printf_init(uart_putchar);`（`uart_hal.c` L176） | 防 `console` 测试残留导致 printf 走到非 UART0 |
 
 ---
 
 ## 6. 代码详解
 
-### 6.1 `main.c` 中 UART0 默认 putchar（L92–97）
+### 6.1 `main.c` 中 UART0 默认 putchar（L93–98）
 
 ```c
- 92 AT(.com_text.uart)
- 93 void uart_putchar(char ch)
- 94 {
- 95     while (!(UART0CON & BIT(8)));   // §6.2 TXPND=1
- 96     UART0DATA = ch;                  // 写 DATA 启动发送
- 97 }
+ 93 AT(.com_text.uart)
+ 94 void uart_putchar(char ch)
+ 95 {
+ 96     while (!(UART0CON & BIT(8)));   // §6.2 TXPND=1
+ 97     UART0DATA = ch;                  // 写 DATA 启动发送
+ 98 }
 ```
 
 **逐段解释**：
 
-- L92 `AT(.com_text.uart)`：链接段属性，把该函数放到 ROM 兼容的特定 section（避免被 boot ROM 链接器丢弃），与 `tick_get` / `delay_us` 等基础函数的处理方式一致。
-- L95 `while (!(UART0CON & BIT(8)))`：阻塞等 TXPND=1。手册 §6.2 L411：TXPND=0 表示"未发送完 1 字节"。手册 §6.2 L428 补充："写 UART0DATA 也会清除 TXPND"，所以写入后 TXPND 自动回到 0，等到再次置 1 才表示本字节发完。**注意** 这里只等一次（与 `test_uart.c` L57 等两次不同），因为 printf 字符流是连续的，下一个字符的 while 自然就把"上一字节发完"隐含处理了。
-- L96 `UART0DATA = ch`：把字符写入数据寄存器，立即启动发送。
+- L93 `AT(.com_text.uart)`：链接段属性，把该函数放到 ROM 兼容的特定 section（避免被 boot ROM 链接器丢弃），与 `tick_get` / `delay_us` 等基础函数的处理方式一致。
+- L96 `while (!(UART0CON & BIT(8)))`：阻塞等 TXPND=1。手册 §6.2 L411：TXPND=0 表示"未发送完 1 字节"。手册 §6.2 L428 补充："写 UART0DATA 也会清除 TXPND"，所以写入后 TXPND 自动回到 0，等到再次置 1 才表示本字节发完。**注意** 这里只等一次（与 `uart_hal_hw_putc` 等两次不同），因为 printf 字符流是连续的，下一个字符的 while 自然就把"上一字节发完"隐含处理了。
+- L97 `UART0DATA = ch`：把字符写入数据寄存器，立即启动发送。
 
 > 这里没有 RX 相关代码——UART0 是单向 TX-only 调试口，PC 只接收不发送。
 
-### 6.2 `main.c` 中 `uart0_mapping_sel`（L165–180）
+### 6.2 `main.c` 中 `uart0_mapping_sel`（L167–182）
 
 ```c
-165 void uart0_mapping_sel(void)
-166 {
-167     // close UART0 default PA7 print
-168     GPIOAPU  &= ~BIT(7);
-169     GPIOAFEN &= ~BIT(7);
-170     GPIOADIR |= BIT(7);
-171     GPIOADE  &= ~BIT(7);
-172     FUNCMCON0 = (0xf << 12) | (0xf << 8);   // clear uart0 mapping
-173
-174     // USB PB3 print
-175     GPIOBDE  |= BIT(3);
-176     GPIOBPU  |= BIT(3);
-177     GPIOBDIR |= BIT(3);
-178     GPIOBFEN |= BIT(3);
-179     FUNCMCON0 = (7 << 12) | (3 << 8);       // RX0 Map To TX0, TX0 Map to G3
-180 }
+167 void uart0_mapping_sel(void)
+168 {
+169     // close UART0 default PA7 print
+170     GPIOAPU  &= ~BIT(7);
+171     GPIOAFEN &= ~BIT(7);
+172     GPIOADIR |= BIT(7);
+173     GPIOADE  &= ~BIT(7);
+174     FUNCMCON0 = (0xf << 12) | (0xf << 8);   // clear uart0 mapping
+175
+176     // USB PB3 print
+177     GPIOBDE  |= BIT(3);
+178     GPIOBPU  |= BIT(3);
+179     GPIOBDIR |= BIT(3);
+180     GPIOBFEN |= BIT(3);
+181     FUNCMCON0 = (7 << 12) | (3 << 8);       // RX0 Map To TX0, TX0 Map to G3
+182 }
 ```
 
 **逐段解释**：
 
-- L168–171：关闭 PA7 上 boot ROM 默认的 UART0 打印（手册 §3.2 L148–156）。把 PA7 的上拉/FEN/DIR/DE 全部置为禁用或输入，避免遗留电平干扰。
-- L172：把 `FUNCMCON0[15:12]` 与 `[11:8]` 都写 0xF，对照手册 §3.3 L167–168 "1111=清除"——**先清**旧映射再写新映射，是 SFR 复用位的标准操作。
-- L175–178：把 PB3 配成数字 IO + 输入方向 + 上拉 + 功能 IO。`DIR|=BIT(3)` 是把方向设**输入**（手册 §3.2 L148：DIR 0=输出/1=输入），但 L179 的 mapping 让 PB3 做 TX，所以这里 DIR 的写法其实是历史遗留——实际 TX 由硬件驱动，并不要求 DIR=0（`uart_putchar` 工作 OK 已验证）。
-- L179：`FUNCMCON0 = (7<<12)|(3<<8)` —— `UT0TXMAP=3`（G3=PB3），`UT0RXMAP=7`（手册 §3.3 L165："0111=由 UT0TXMAP 选择"，即 RX 也指到 TX 同脚，配合 `ONELINE=1` 单线工作）。
+- L170–173：关闭 PA7 上 boot ROM 默认的 UART0 打印（手册 §3.2 L148–156）。把 PA7 的上拉/FEN/DIR/DE 全部置为禁用或输入，避免遗留电平干扰。
+- L174：把 `FUNCMCON0[15:12]` 与 `[11:8]` 都写 0xF，对照手册 §3.3 L167–168 "1111=清除"——**先清**旧映射再写新映射，是 SFR 复用位的标准操作。
+- L177–180：把 PB3 配成数字 IO + 输入方向 + 上拉 + 功能 IO。`DIR|=BIT(3)` 是把方向设**输入**（手册 §3.2 L148：DIR 0=输出/1=输入），但 L181 的 mapping 让 PB3 做 TX，所以这里 DIR 的写法其实是历史遗留——实际 TX 由硬件驱动，并不要求 DIR=0（`uart_putchar` 工作 OK 已验证）。
+- L181：`FUNCMCON0 = (7<<12)|(3<<8)` —— `UT0TXMAP=3`（G3=PB3），`UT0RXMAP=7`（手册 §3.3 L165："0111=由 UT0TXMAP 选择"，即 RX 也指到 TX 同脚，配合 `ONELINE=1` 单线工作）。
 
-### 6.3 `main.c` 中 `set_sys_clk`（L182–220）
+### 6.3 `main.c` 中 `set_sys_clk`（L184–222）
 
 ```c
-182 void set_sys_clk(u32 sys_clk)
-183 {
-184     u32 cpu_ie;
-185     u32 uart_baud, spll_div = 0, spi_baud = 0;
-186
-187     if (sys_clk == SYS_24M) {
-188         spll_div = 1;
-189         spi_baud = 1;
-190         uart_baud = (((24000000 + (UART_BAUD / 2)) / UART_BAUD) - 1);
-191     } else if (sys_clk == SYS_48M) {
+184 void set_sys_clk(u32 sys_clk)
+185 {
+186     u32 cpu_ie;
+187     u32 uart_baud, spll_div = 0, spi_baud = 0;
+188
+189     if (sys_clk == SYS_24M) {
+190         spll_div = 1;
+191         spi_baud = 1;
+192         uart_baud = (((24000000 + (UART_BAUD / 2)) / UART_BAUD) - 1);
+193     } else if (sys_clk == SYS_48M) {
 ...
-198     cpu_ie = PICCON & BIT(0);
-199     PICCONCLR = BIT(0);                       // disable IRQ, switch system clock
-200
-201     if(UART0CON & BIT(0)) {                    // UTEN=1 ?
-202         while (!(UART0CON & BIT(8)));          // 等待 UART0 当前字节发完
-203     }
-204     CLKCON0 &= ~(BIT(2) | BIT(3));             // sysclk → rc2m
+200     cpu_ie = PICCON & BIT(0);
+201     PICCONCLR = BIT(0);                       // disable IRQ, switch system clock
+202
+203     if(UART0CON & BIT(0)) {                    // UTEN=1 ?
+204         while (!(UART0CON & BIT(8)));          // 等待 UART0 当前字节发完
+205     }
+206     CLKCON0 &= ~(BIT(2) | BIT(3));             // sysclk → rc2m
 ...
-208     CLKCON0 |= BIT(30);
+210     CLKCON0 |= BIT(30);
 ...
-213     CLKCON0 |= BIT(4);                         // spll select xosc52m_clk
-214     CLKCON2 |= (spll_div << 8);
-215     CLKCON0 |= BIT(3);                         // sysclk sel spll
-216
-217     UART0BAUD = (uart_baud << 16) | uart_baud; // 按新 Fsys 重算 baud
-218     SPI0BAUD = spi_baud;
-219     PICCON |= cpu_ie;
-220 }
+215     CLKCON0 |= BIT(4);                         // spll select xosc52m_clk
+216     CLKCON2 |= (spll_div << 8);
+217     CLKCON0 |= BIT(3);                         // sysclk sel spll
+218
+219     UART0BAUD = (uart_baud << 16) | uart_baud; // 按新 Fsys 重算 baud
+220     SPI0BAUD = spi_baud;
+221     PICCON |= cpu_ie;
+222 }
 ```
 
 **关键点**：
 
-- L190 / L194：根据目标系统时钟重新算 UART0 的 BAUD divisor（L17–18 `UART_BAUD=1500000`）。
-- L199：关全局中断，避免切时钟过程被打断丢数据。
-- L201–203：若 UART0 已使能，**等待当前字节发完**再切时钟——否则波特率突变会让正在发的字节电平失真。
-- L217：切完时钟立即按新 Fsys 重算并写入 `UART0BAUD`。
+- L192 / L196：根据目标系统时钟重新算 UART0 的 BAUD divisor（L17–18 `UART_BAUD=1500000`）。
+- L201：关全局中断，避免切时钟过程被打断丢数据。
+- L203–205：若 UART0 已使能，**等待当前字节发完**再切时钟——否则波特率突变会让正在发的字节电平失真。
+- L219：切完时钟立即按新 Fsys 重算并写入 `UART0BAUD`。
 
 → UART2 没用这里面的"动态切"逻辑，因为 UART2 测试只在 `set_sys_clk` 之后跑，时钟已经稳定。
 
-### 6.4 `test_uart.c` 中 `uart2_test_init`（L20–50）
+### 6.4 `uart_hal.c` 中 `uart_hal_hw_init`（L137–177）
+
+> **2026-07-17 HAL 重构后**：本函数是**唯一**的硬件 UART2 init 入口，`test_uart.c` 不再持有 init 实现（详见 §8.2 疑点 2 解决状态）。
+
+代码见 §5 Step 1–10 列表。差异点回顾：
+
+- L159：`baud_val` 计算改公式化（支持任意 baud 参数传入）。
+- L167–170：清 RXPND 循环里**额外**加 `UART2CPND = BIT(9)`，修复残留挂起的潜在问题。
+- L176：调 `my_printf_init(uart_putchar)` 还原默认 printf（防 console 测试残留，见 §6.10）。
+
+### 6.5 `uart_hal.c` 中 `uart_hal_hw_putc` / `_hw_getc`（L179–193）
 
 ```c
- 20 static void uart2_test_init(void)
- 21 {
- 22     FUNCMCON1 &= ~((0xF << 4) | (0xF << 8));
- 23     FUNCMCON1 |= (2 << 4) | (2 << 8);           // TX=PB2, RX=PB1 (G2)
- 24
- 25     GPIOBFEN |=  BIT(2);   GPIOBDE |=  BIT(2);
- 26     GPIOBDIR &= ~BIT(2);   GPIOBPU  |=  BIT(2);
- 27
- 28     GPIOBFEN |=  BIT(1);   GPIOBDE |=  BIT(1);
- 29     GPIOBDIR |=  BIT(1);   GPIOBPU  |=  BIT(1);
- 30
- 31     u32 baud_val = 207;
- 32     UART2BAUD = (baud_val << 16) | baud_val;
- 33
- 34     UART2CON = BIT(7) | BIT(0);
- 35     delay_ms(10);
- 36
- 37     while (UART2CON & BIT(9)) {
- 38         (void)UART2DATA;
- 39     }
- 40 }
+179 void uart_hal_hw_putc(u8 tx)
+180 {
+181     while (!(UART2CON & BIT(8)));   // 等 TX 空闲（§6.2 TXIPND=1）
+182     UART2DATA = tx;
+183     while (!(UART2CON & BIT(8)));   // 等发送完成（TXIPND 重新置 1）
+184 }
+185
+186 u8 uart_hal_hw_getc(void)
+187 {
+188     u8 ch;
+189     while (!(UART2CON & BIT(9)));   // 等 RXIPND=1
+190     ch = (u8)UART2DATA;
+191     UART2CPND = BIT(9);              // ★ 显式清挂起
+192     return ch;
+193 }
 ```
 
-**逐段解释**：
+- **putc**（L179–184）：等两次 TXPND——保证上一字节完全离开移位寄存器再返回；比 `uart_putchar`（main.c L96 只等 1 次）更严格，确保 PC 端不会收到错位帧。
+- **getc**（L186–193）：等 RXPND=1 后**显式**写 `UART2CPND = BIT(9)` 清挂起（手册 §6.2 L427 "写 1 清"）——这是关键的 bugfix：早期 `uart2_getc` 没显式清，下次循环 `while (!(RXPND))` 会因残留 PND 立刻通过，读到 DATA 寄存器的**同一字节**。
 
-- L22–23：选 G2 映射。
-- L25–29：PB2/PB1 配 FEN/DE/DIR/PU（详见 §5 Step 4–5）。
-- L31：直接用常数 `207`，未走 HAL 的四舍五入式。HAL 版（`uart_hal.c` L159）通用性更好：`u32 baud_val = (24000000 + baud/2)/baud - 1`。
-- L34：一次写 `RXEN | UTEN`（BIT(7) | BIT(0)），其他位（TXIE/RXIE/CLKSRC 等）保持默认 0。
-- L37–39：**只读 DATA 不清 RXPND**——这是早期版本的 bug（详见 §8 审查小节）。HAL 版 L167–170 修法：`UART2CPND = BIT(9)`。
+### 6.6 `test_uart.c` 中 `test_uart2_recv_run`（L109–198）
 
-### 6.5 `test_uart.c` 中 `uart2_putc`（L52–58）
-
-```c
- 52 static void uart2_putc(u8 ch)
- 53 {
- 54     while (!(UART2CON & BIT(8)));   // 等待 TX 空闲
- 55     UART2DATA = ch;                  // 写入数据，开始发送
- 56     while (!(UART2CON & BIT(8)));   // ★ 等待发送完成（TXPND 重新变 1）
- 57 }
-```
-
-- L54：手册 §6.2 L411 TXPND=1 表示"未发送完 1 字节"——所以取反 `!(UART2CON & BIT(8))` 等于"上一字节还没发完，继续等"。
-- L55：手册 §6.2 L428 "写 UARTxDATA 也会清除 TXPND"——写入后 TXPND 立即变 0。
-- L56：第二次等 TXPND=1，表示本字节发完。**HAL 版 `uart_hal_hw_putc`（`uart_hal.c` L179–184）同样保留这两个 while**——比 `uart_putchar`（main.c L95 只等 1 次）更严格，确保上一字节完全离开移位寄存器再返回。
-
-### 6.6 `test_uart.c` 中 `uart2_getc`（L60–65）
-
-```c
- 60 static u8 uart2_getc(void)
- 61 {
- 62     while (!(UART2CON & BIT(9)));   // 等待 RXPND=1
- 63     return (u8)UART2DATA;
- 64 }
-```
-
-- L62：手册 §6.2 L410 "RXPND=1: 接收完成 1 字节"。
-- L63：读 UART2DATA 返回。**注意**：早期版本这里**没有显式清 RXPND**（HAL 版 L191 已加 `UART2CPND = BIT(9)`，详见 §8 审查）。
-
-### 6.7 `test_uart.c` 中 `test_uart2_recv_run`（L154–237）
-
-行缓存接收 + Ctrl+C 退出，是 `test_uart.md` §2.5 2026-07-21 升级的重点。逻辑：
+行缓冲 + Ctrl+C 退出 + per-byte echo（commit `acfb23e` 2026-07-22 加 echo），逻辑：
 
 | L# | 作用 |
 |:---|:---|
-| 169–172 | 行缓冲（64 字节）+ rx_count / line_count 计数 |
-| 175 | 阻塞读一字节（`uart2_getc`） |
-| 178–181 | 收到 `0x03`（Ctrl+C）→ 打印 `[Recv] Exit requested` 并 break |
-| 184–198 | 收到 `\r` / `\n` → 整行 flush（行空时打 `<CR/LF only>`） |
-| 201–206 | 收到 `0x08` / `0x7F` → 退格（删除前一个字符） |
-| 209–211 | 其它 `< 0x20` 控制字符丢弃（避免破坏格式串） |
-| 213–223 | 行未满 → 追加；行已满 → 立即 flush 再作为新行起点 |
-| 234–235 | 退出前打印统计 |
+| 121–124 | 行缓冲（64 字节）+ rx_count / line_count 计数 |
+| 127 | 阻塞读一字节（`uart_hal_hw_getc`，显式清 RXPND） |
+| 132–136 | **每字节立即 echo** `RX[NNN] 0xXX 'C'`（per-byte echo，hex send 工具不需等 Enter）|
+| 139–142 | 收到 `0x03`（Ctrl+C）→ 打印 `[Recv] Exit requested` 并 break |
+| 145–159 | 收到 `\r` / `\n` → 整行 flush（行空时打 `<CR/LF only>`） |
+| 161–167 | 收到 `0x08` / `0x7F` → 退格（删除前一个字符） |
+| 169–172 | 其它 `< 0x20` 控制字符丢弃（避免破坏格式串） |
+| 174–184 | 行未满 → 追加；行已满 → 立即 flush 再作为新行起点 |
+| 190–195 | 退出前打印统计 |
 
-> 此处 L175 调用 `uart2_getc`，**未显式清 RXPND**——但因为每次进入 while 都重新等 RXPND=1，连续接收没有问题（详见 §8 审查第 3 点）。
+> **已知限制**：轮询 `uart_hal_hw_getc` 在 printf 阻塞期间跟不上 115200 baud PC 突发，会丢字节。详见 [test_uart_ringbuf.md §1](test_uart_ringbuf.md) 与 §8.2 疑点 11。
 
-### 6.8 `uart_hal.c` 中 `uart_hal_hw_init`（L137–177）
-
-与 `test_uart.c` 的 `uart2_test_init` 几乎一致，差异 3 处：
-
-- L159：`baud_val` 计算改公式化（支持任意 baud 参数传入）。
-- L167–170：清 RXPND 循环里**额外**加 `UART2CPND = BIT(9)`，修复 `uart2_getc` 残留挂起的潜在问题。
-- L176：调 `my_printf_init(uart_putchar)` 还原默认 printf（防 console 测试残留，见 §6.10）。
-
-### 6.9 `uart_hal.c` 中软件 bit-bang 实现（L28–128）
+### 6.7 `uart_hal.c` 中软件 bit-bang 实现（L28–128）
 
 ```c
  28 void uart_hal_soft_init(u32 baud)
@@ -449,16 +412,16 @@ HAL 版完整步骤在 `uart_hal.c` L137–177，对照上述 10 步多出第 10
 
 > `uart_hal_soft_txrx`（L105–128）是 loopback 专用：边发 TX 边在每 bit 中心采 RX。"putc + getc 组合"在 loopback 会死锁——putc 完线停在 stop HIGH，getc 等 start bit 永远不来，详见 `test_uart_hal_refactor.md` §3 Step 4。
 
-### 6.10 `uart_hal.c` 中 Console / printf 重定向层（L199–224）
+### 6.9 `uart_hal.c` 中 Console / printf 重定向层（L199–224）
 
 ```c
 199 void uart_hal_console_init(u32 baud)
 200 {
 201     uart_hal_hw_init(baud);                    // 复用 hw_init
 202
-203     printf("\r\n===== BT892X UART2 Console =====\r\n");   // 仍走 UART0
+203     printf("\r\n===== BT892X UART2 Console (printf -> UART2) =====\r\n");   // 仍走 UART0
 204     printf("UART2: TX=PB2, RX=PB1, 115200bps 8N1\r\n");
-205     printf("Wiring: ...\r\n");
+205     printf("Wiring: PB2->USB-TTL RX, PB1<-USB-TTL TX, GND-GND\r\n");
 206
 207     my_printf_init(uart_hal_console_putchar);  // ★ 切到 UART2
 208     printf("Type chars in PC serial monitor; they will be echoed back:\r\n");
@@ -476,19 +439,11 @@ HAL 版完整步骤在 `uart_hal.c` L137–177，对照上述 10 步多出第 10
 
 > 这是 `my_printf_init` 的标准用法：先 `init` 注册回调，再 `printf`。回调内部调阻塞 putc 是合法的——printf 不是中断上下文。
 
-### 6.11 `test_uart.c` 中 `test_uart2_console_run`（L266–280）
+> **历史变更（commit 940e728）**：早期版本把 banner 放在 `my_printf_init` 之前 print，所有 3 行 banner 走 UART0/PB3，但用户场景只接了 PB2/PB1 的 USB-TTL，看不到 banner 误以为卡死。改为先 init 再 printf → banner 全部从 UART2/PB2 出。
 
-与 HAL 版几乎一致，差异在 `uart2_console_init`（L260–264）：
+### 6.10 `test_uart.c` 中 `test_uart2_console_run`（L206–215）
 
-```c
-260 void uart2_console_init(void)
-261 {
-262     uart2_test_init();
-263     my_printf_init(uart2_console_putchar);
-264 }
-```
-
-无 banner 前置打印。HAL 版的"先 banner 后切"是更好的工程实践。
+HAL 重构后此入口直接调 `uart_hal_console_init(115200)`，banner 由 HAL 自带打印（§6.9）。原 `test_uart.c` 里独立的 `uart2_console_init()`（含 `uart2_test_init()` + `my_printf_init(uart2_console_putchar)`）已在 commit `629ed39` 删除——`test_uart2_console_run` 是唯一入口。
 
 ---
 
@@ -501,62 +456,65 @@ HAL 版完整步骤在 `uart_hal.c` L137–177，对照上述 10 步多出第 10
 | **UART0/PB3**（调试口，**必接**） | PB3 → USB-TTL RX；GND ↔ GND；串口助手 1.5 Mbps 8N1 |
 | **UART2/PB2(TX) / PB1(RX)**（按测试选接） | 见各子节 |
 
-### 7.2 `TEST_UART_EN` —— 硬件回环（L70–99 of `test_uart.c`）
+### 7.2 `TEST_UART_EN` —— 硬件回环（`test_uart.c` L28–51）
 
 | 项 | 内容 |
 |:---|:---|
 | 接线 | **跳线 PB2 ↔ PB1**（短接 TX 和 RX） |
-| 代码位置 | `test_uart.c` L70–99 |
+| 代码位置 | `test_uart.c` L28–51 (`test_uart_run`) |
 | 行为 | 自发自收 0x00~0xFF 共 256 字节；每发一字节等 RXPND=1，再读 UART2DATA 与发送值比对 |
 | 串口预期（PB3 @ 1.5M） | `===== BT892X UART2 Loopback Test =====` → `UART2: TX=PB2, RX=PB1, 115200bps 8N1` → `Jumper: PB2(TX) <-> PB1(RX)` → `===== Result =====` → `Total: 256, Errors: 0` → `ALL PASSED!` |
 | 实测引用 | `test_uart.md` §2.4 实测输出：`Total: 256, Errors: 0` |
 | 逻辑分析仪预期（可选） | PB2 TX：start LOW + 8 数据 bit（LSB-first）+ stop HIGH；PB1 RX 与 PB2 完全镜像（loopback）；每 bit 宽 ≈ 24M/115200 ≈ 8.68µs；总帧 ≈ 87µs |
 
-### 7.3 `TEST_UART_SEND_EN` —— 持续发送（L105–147 of `test_uart.c`）
+### 7.3 `TEST_UART_SEND_EN` —— 持续发送（`test_uart.c` L57–99）
 
 | 项 | 内容 |
 |:---|:---|
 | 接线 | **PB2 → USB-TTL RX**；GND ↔ GND；**不接 PB1**（开路） |
-| 代码位置 | `test_uart.c` L105–147 |
+| 代码位置 | `test_uart.c` L57–99 (`test_uart2_send_run`) |
 | 行为 | 每 500ms 发一行：`[N] Hello UART2!`，N 从 0 递增 |
 | PC 串口助手预期 | 115200 8N1，每 0.5s 收到一行 `[0] Hello UART2!` / `[1] Hello UART2!` / ... |
 | 实测引用 | `test_uart.md` §2.3 表"持续发送 ✅ PC 串口助手正常收到" |
 | LA 预期 | PB2 持续出现短帧，间隔 ~500ms |
 
-> 备注：`test_uart.c` L116–146 手工把每个字符 putc 出去而非用 printf——因为 `TEST_UART_SEND_EN` 默认 printf 还走 UART0；且不能依赖 printf 重定向（会破坏 banner 在 PB3 显示）。
+> 备注：`test_uart2_send_run` L68–98 手工把每个字符 putc 出去而非用 printf——因为 `TEST_UART_SEND_EN` 默认 printf 还走 UART0；且不能依赖 printf 重定向（会破坏 banner 在 PB3 显示）。
 
-### 7.4 `TEST_UART_RECV_EN` —— 逐行接收（L154–237 of `test_uart.c`）
+### 7.4 `TEST_UART_RECV_EN` —— 逐行接收 + per-byte echo（`test_uart.c` L109–198）
 
 | 项 | 内容 |
 |:---|:---|
 | 接线 | **USB-TTL TX → PB1**；GND ↔ GND；**不接 PB2**（开路） |
-| 代码位置 | `test_uart.c` L154–237 |
-| 行为 | 收一字节 → 行缓存；遇 `\r`/`\n` 整行 `printf`（走 UART0/PB3 显示）；遇 `0x03` 退出；遇 `0x08`/`0x7F` 退格 |
-| PB3 串口预期 | PC 发 `hello\r\n` → PB3 打 `UART2 RX line #0: "hello" (len=5)`；长行 64+ 字符 → 自动 flush 一次再继续；Ctrl+C → `[Recv] Exit requested (0x03)` + `[Recv] Total bytes: N, total lines: M` |
-| 实测引用 | `test_uart.md` §2.5（含完整预期输出） |
+| 代码位置 | `test_uart.c` L109–198 (`test_uart2_recv_run`) |
+| 行为 | **每字节立即 echo** `RX[NNN] 0xXX 'C'`（commit `acfb23e`）；同时维护 64B 行缓冲，遇 `\r`/`\n` 整行 `printf` `UART2 RX line #N: "..."`；遇 `0x03` 退出；遇 `0x08`/`0x7F` 退格 |
+| PB3 串口预期 | PC 发 `hello\r\n` → PB3 打：<br>`RX[000] 0x68 'h'`<br>`RX[001] 0x65 'e'`<br>`RX[002] 0x6C 'l'`<br>`RX[003] 0x6C 'l'`<br>`RX[004] 0x6F 'o'`<br>`RX[005] 0x0D`<br>`UART2 RX line #0: "hello" (len=5)` |
+| 长行 64+ 字符 | 自动 flush 前 64 字符再继续 |
+| Ctrl+C (0x03) | `[Recv] Exit requested (0x03)` + `[Recv] Total bytes: N, total lines: M` |
+| 实测引用 | `test_uart.md` §2.5（含完整预期输出）；per-byte echo 引入 115200 baud 突发丢字节风险，详见 [test_uart_ringbuf.md](test_uart_ringbuf.md) |
 | LA 预期（可选） | PB1 RX 出现完整 UART 帧：start LOW + 8 bit + stop HIGH；bit 宽 ≈ 8.68µs |
 
-### 7.5 `TEST_UART_CONSOLE_EN` —— printf 重定向 + 回显（L266–280 of `test_uart.c`）
+### 7.5 `TEST_UART_CONSOLE_EN` —— printf 重定向 + 回显（`test_uart.c` L206–215）
 
 | 项 | 内容 |
 |:---|:---|
 | 接线 | **全双工**：PB2 → USB-TTL RX；USB-TTL TX → PB1；GND ↔ GND |
-| 代码位置 | `test_uart.c` L266–280 |
-| 行为 | 调 `uart2_console_init`（内部 `my_printf_init(uart2_console_putchar)`），所有 printf 走 UART2/PB2；主循环 `uart2_getc → uart2_putc` 回显；收到 `\r` 多发一个 `\n`（终端习惯） |
-| 串口助手预期（115200 8N1） | 开机先收到 4 行 banner：`===== BT892X UART2 Console (printf -> UART2) =====` / `UART2: TX=PB2, RX=PB1, 115200bps 8N1` / `Wiring: PB2->USB-TTL RX, PB1<-USB-TTL TX, GND-GND` / `Type chars ...`；之后每敲一字符立即收到回显 |
-| 实测引用 | `test_uart.md` §2.3 表"banner 显示 ✅" / §2.4 实测输出 |
-| ⚠️ 副作用 | 该 build 内所有 printf 都已切到 UART2；切回其它 build 时需在 main.c 启动时调 `my_printf_init(uart_putchar)`（详见 `test_uart.md` §2.6） |
+| 代码位置 | `test_uart.c` L206–215 (`test_uart2_console_run`) |
+| 行为 | 调 `uart_hal_console_init(115200)`：内部 `uart_hal_hw_init` + `my_printf_init(uart_hal_console_putchar)`，所有 printf 走 UART2/PB2；主循环 `uart_hal_console_getc → uart_hal_console_putchar` 回显；收到 `\r` 多发一个 `\n`（终端习惯） |
+| 串口助手预期（115200 8N1） | 开机在 **PB2** 上收到 4 行 banner：`===== BT892X UART2 Console (printf -> UART2) =====` / `UART2: TX=PB2, RX=PB1, 115200bps 8N1` / `Wiring: PB2->USB-TTL RX, PB1<-USB-TTL TX, GND-GND` / `Type chars ...`；之后每敲一字符立即收到回显（**全部在 PB2**，不再走 PB3）|
+| 实测引用 | commit `940e728` 修复后：banner + 回显均通过 |
+| ⚠️ 副作用 | 该 build 内所有 printf 都已切到 UART2；切回其它 build 时需在 main.c 启动时调 `my_printf_init(uart_putchar)`（HAL `uart_hal_hw_init` 末尾已自动调）|
 
 ### 7.6 `TEST_UART_SOFT_EN` —— 软件 bit-bang（HAL 版）
 
-> **说明**：`test_uart_soft.c/.h` 在 `test_uart_hal_refactor.md` §3 Step 5 已被删除（与 LOOP 软路重复）。HAL 版通过 `UART_MODE`（`test_uart_hal_refactor.md` §4.3）切换软/硬/双路，软 bit-bang 路径为 `uart_hal_soft_*`。
+> **说明**：`test_uart_soft.c/.h` 独立文件在 `test_uart_hal_refactor.md` §3 Step 5 已被删除。HAL 重构后**所有测试入口都集中在 `test_uart.c`**，软路通过 `test_uart_soft_run` 入口调 `uart_hal_soft_*`（与硬件版共用同一份 HAL 接口）。
 
 | 项 | 内容 |
 |:---|:---|
 | 接线 | 跳线 PB2 ↔ PB1（同硬件版） |
+| 代码位置 | `test_uart.c` L222–237 (`test_uart_soft_run`) |
 | 行为 | 边发边采 TXRX（`uart_hal_soft_txrx`），256 字节 loopback |
 | LA 预期 | PB2 TX 与 PB1 RX 完全镜像；bit 宽 = 104µs（9600 bps）；半 bit = 52µs |
-| 实测 | `test_uart_hal_refactor.md` §0 / §3 Step 4 / §10.1：LOOP 软+硬双路 256 字节 PASSED |
+| 实测 | commit `940e728`：256 字节 PASSED（Total: 256, Errors: 0）|
 
 ### 7.7 main.c 中相关宏定义
 
@@ -566,12 +524,12 @@ HAL 版完整步骤在 `uart_hal.c` L137–177，对照上述 10 步多出第 10
 
 // #define TEST_UART_EN         1      // 硬件 UART2 回环
 // #define TEST_UART_SEND_EN    1      // 硬件 UART2 持续发送
-// #define TEST_UART_RECV_EN    1      // 硬件 UART2 接收
+// #define TEST_UART_RECV_EN    1      // 硬件 UART2 接收 (轮询, 115200 burst 丢字节)
 // #define TEST_UART_CONSOLE_EN 1      // 硬件 UART2 收发回显 + printf 重定向
 // #define TEST_UART_SOFT_EN    1      // 软件 bit-bang 回环
 ```
 
-注意 `main.c` L52 注释：**`TEST_UART_EN` 不能与 `TEST_TIMER_PWM_EN` 同开**（PB1/PB2 与 TMR3 PWM 冲突）；同理 5 个 `TEST_UART_*_EN` 互相之间一次也只能开一个（PB1/PB2 唯一性）。
+注意 `main.c` L53 注释：**`TEST_UART_EN` 不能与 `TEST_TIMER_PWM_EN` 同开**（PB1/PB2 与 TMR3 PWM 冲突）；同理 5 个 `TEST_UART_*_EN` 互相之间一次也只能开一个（PB1/PB2 唯一性）。
 
 ---
 
@@ -591,28 +549,34 @@ HAL 版完整步骤在 `uart_hal.c` L137–177，对照上述 10 步多出第 10
 | 8 | UART 时钟源 CLKSRC=0 = 系统时钟 | §6.2 L414 | 工程默认 `CLKSRC=0`（未显式写寄存器，依赖 reset 默认） | ✅ |
 | 9 | 24 MHz / 115200 = 207.x → 选 207 | 计算 | `uart2_test_init` 写 207；HAL 版 `(24M+baud/2)/baud - 1` | ✅ |
 | 10 | UART0 默认 putchar 等 TXPND | §6.2 L411 | `while(!(UART0CON & BIT(8)))`（`main.c` L95） | ✅ |
-| 11 | UART0 TX 映射 G3=PB3 | `bt892x_pinfunction.md` §4.2 L117 + §3.3 | `(3<<8)`（`main.c` L179） | ✅ |
+| 11 | UART0 TX 映射 G3=PB3 | `bt892x_pinfunction.md` §4.2 L117 + §3.3 | `(3<<8)`（`main.c` L181） | ✅ |
 | 12 | `my_printf_init` 切 printf 通道 | `clib.h` L10 + `reset.S` L128（ROM 0x8401c） | `my_printf_init(uart_putchar)` / `my_printf_init(uart2_console_putchar)` | ✅ |
 | 13 | 写 UARTxDATA 自动清 TXPND 但**不**自动清 RXPND | §6.2 L428 + `uart_hal.h` L18–19 注释 | HAL 版 `uart_hal_hw_getc` 显式 `UART2CPND = BIT(9)`（L191） | ✅ |
 | 14 | 软件 bit-bang 时 FEN=0 强制 GPIO | §3.2 L156 | `GPIOBFEN &= ~(UART_TX_PIN\|UART_RX_PIN)`（`uart_hal.c` L31） | ✅ |
 
 ### 8.2 已发现疑点（只记录，未要求改代码）
 
-| 编号 | 疑点 | 位置 | 影响 | 备注 |
+| 编号 | 疑点 | 位置 | 影响 | 备注 / 状态 |
 |:---|:---|:---|:---|:---|
-| 1 | **`test_uart.c` 的 `uart2_getc` 未显式清 RXPND**（与 HAL 版 `uart_hal_hw_getc` 的修法不一致） | `test_uart.c` L60–65 | 在快速连续调用场景下可能导致首次读 DATA 拿到对的数据但下一次循环条件误判（实际未观察到 bug，因为每次 while 都重新等 RXPND=1，且本工程连续接收后立刻 `UART2DATA` 不会让 RXPND 滞留在 1） | HAL 版 `uart_hal.c` L191 已加 `UART2CPND = BIT(9)` 修复；建议后续把 `test_uart.c` 同步成 HAL 版（见疑点 2） |
-| 2 | **`test_uart.c` 与 `uart_hal.c` 重复实现 `uart2_*` 函数** | `test_uart.c` L20–50 / L52–58 / L60–65 / L247–264；`uart_hal.c` L137–193 / L199–219 | 两份几乎一致的初始化代码导致维护成本翻倍（已在 `test_uart_hal_refactor.md` §3 Step 5 删除 `test_uart_soft.c`，但 `test_uart.c` 仍有自己的 `uart2_test_init`） | 后续重构方向：把 `test_uart.c` 的 4 个 `test_uart*_run` 改为直接调 `uart_hal_*`，消除 `uart2_test_init` / `uart2_putc` / `uart2_getc` 重复实现 |
-| 3 | `test_uart2_recv_run` L175 调 `uart2_getc` 不清 RXPND，连续接收会"少读一次"？ | `test_uart.c` L174–226 | 经分析**不会**——手册 §6.2 L410：RXPND=1 表示"接收完成 1 字节"；读 UART2DATA 不清 RXPND 意味着下一次 while 仍能立刻通过（条件仍满足），但读取数据寄存器会读到**同一字节**——而代码每次 while 顶部才等 PND，第一次进 while 时 PND=1 立即通过。**实际测试** 收 `hello\n` 5 字节正常（见 `test_uart.md` §2.5），未观察到丢字节 | 风险：若 RXPND 真的不被清，会反复读到第一字节导致后续字节丢失——但实测无此现象，疑为 BT892X 实现里 RXPND 实际有自清，或 RTL 在 RX 移位寄存器重载时自动清 PND。**保守建议**：保留疑点 1 的同步修复 |
-| 4 | **`UART1(PA6/PA7) G1` 物理损坏已弃用** | `test_uart.c` L10 注释；`test_uart.md` §0 | 工程影响：无——已迁移到 UART2。但手册里 UART1 仍占 SFR 空间 | 历史决策已落实；建议在 `main.c` L52 注释区也写一句"UART1 损坏已弃用，避免误改" |
-| 5 | **PB1/PB2 与 TMR3 PWM 冲突** | `main.c` L52 注释；`bt892x_pinfunction.md` §4.2 L115–116 + §8.6 L245–246 | 工程已有约束（`TEST_UART_*` 与 `TEST_TIMER_PWM_EN` 互斥），但**没有运行时检查**——如果用户同时 `#define` 两个宏会静默冲突 | 建议增加编译期 `#if defined(TEST_UART_EN) && defined(TEST_TIMER_PWM_EN) #error ...` |
-| 6 | `main.c` L165–180 `uart0_mapping_sel` 把 PB3 设 DIR=输入但作为 TX 使用 | `main.c` L177 `GPIOBDIR \|= BIT(3)` | 工程实测工作 OK（手册 §3.2 L148 DIR 0=输出/1=输入），原因可能是 TX 由外设驱动时 DIR 位不影响输出——但**理论上** 应设 DIR=0 输出 | 历史实现稳定，未观察到问题；建议加注释说明 |
-| 7 | `UART2CON[5] CLKSRC` 默认 0 选系统时钟，但工程**未显式写**该位 | `test_uart.c` L43 / `uart_hal.c` L163 | 依赖 reset 默认值（手册 §6.2 L414 未明说默认值，但 §6.2 表格 Mode 列为 WR 即可读写） | 工程工作 OK；如未来需要切到 `uart_inc` 异步时钟源才需显式操作 |
-| 8 | `FUNCMCON1 = 0xffffffff` 关闭全部映射（含 SPI1 / FMOSC） | `main.c` L229 | 启动时把 SPI1/FMOSC 也一并清掉——若 boot ROM 默认这些有映射会被覆盖 | 假设：boot ROM 默认值安全；如有问题可改为 `FUNCMCON1 = 0x0000ff00` 仅清 [11:4] 两位 |
-| 9 | `UART2CON = BIT(7)\|BIT(0)` 是直接赋值不是 OR 操作 | `test_uart.c` L43；`uart_hal.c` L163 | 假设 init 前 `UART2CON` 一定为 0；若 boot ROM 默认有任何残留位（如 TXPND/RXPND 只读位之外的可写位）会被清掉 | 工程未观察到问题；保守做法可用 `UART2CON \|= BIT(7)\|BIT(0)` 代替 |
+| 1 | **`test_uart.c` 的 `uart2_getc` 未显式清 RXPND** | `test_uart.c` 已不存在该函数 | — | **✅ 已解决**（commit `629ed39`）：`test_uart.c` 的 `uart2_getc` 删除，所有 RECV 走 `uart_hal_hw_getc`（`uart_hal.c` L186–193），显式 `UART2CPND = BIT(9)` |
+| 2 | **`test_uart.c` 与 `uart_hal.c` 重复实现 `uart2_*` 函数** | `test_uart.c` / `uart_hal.c` | 两份几乎一致的初始化代码导致维护成本翻倍 | **✅ 已解决**（commit `629ed39`）：`test_uart.c` 的 5 个 `test_uart*_run` 全部调 `uart_hal_*`，`uart2_test_init / putc / getc / console_init / console_putchar` 全部删除 |
+| 3 | `test_uart2_recv_run` 不清 RXPND，连续接收会"少读一次" | `test_uart.c`（已用 `uart_hal_hw_getc`）| — | **✅ 已解决**：同疑点 1，现在显式清 RXPND。但 commit `acfb23e` 加 per-byte echo 后**新发现一类问题**：轮询 `getc` 在 printf 阻塞期间跟不上 115200 baud PC 突发，会丢字节——见 [test_uart_ringbuf.md](test_uart_ringbuf.md) 设计文档（中断+ringbuf 方案）|
+| 4 | **`UART1(PA6/PA7) G1` 物理损坏已弃用** | `test_uart.c` L10 注释；`test_uart.md` §0 | 工程影响：无——已迁移到 UART2。但手册里 UART1 仍占 SFR 空间 | 历史决策已落实；建议在 `main.c` L53 注释区也写一句"UART1 损坏已弃用，避免误改" |
+| 5 | **PB1/PB2 与 TMR3 PWM 冲突** | `main.c` L53 注释；`bt892x_pinfunction.md` §4.2 L115–116 + §8.6 L245–246 | 工程已有约束（`TEST_UART_*` 与 `TEST_TIMER_PWM_EN` 互斥），但**没有运行时检查**——如果用户同时 `#define` 两个宏会静默冲突 | 建议增加编译期 `#if defined(TEST_UART_EN) && defined(TEST_TIMER_PWM_EN) #error ...` |
+| 6 | `main.c` L167–182 `uart0_mapping_sel` 把 PB3 设 DIR=输入但作为 TX 使用 | `main.c` L179 `GPIOBDIR \|= BIT(3)` | 工程实测工作 OK（手册 §3.2 L148 DIR 0=输出/1=输入），原因可能是 TX 由外设驱动时 DIR 位不影响输出——但**理论上** 应设 DIR=0 输出 | 历史实现稳定，未观察到问题；建议加注释说明 |
+| 7 | `UART2CON[5] CLKSRC` 默认 0 选系统时钟，但工程**未显式写**该位 | `uart_hal.c` L163 | 依赖 reset 默认值（手册 §6.2 L414 未明说默认值，但 §6.2 表格 Mode 列为 WR 即可读写） | 工程工作 OK；如未来需要切到 `uart_inc` 异步时钟源才需显式操作 |
+| 8 | `FUNCMCON1 = 0xffffffff` 关闭全部映射（含 SPI1 / FMOSC） | `main.c` L231 | 启动时把 SPI1/FMOSC 也一并清掉——若 boot ROM 默认这些有映射会被覆盖 | 假设：boot ROM 默认值安全；如有问题可改为 `FUNCMCON1 = 0x0000ff00` 仅清 [11:4] 两位 |
+| 9 | `UART2CON = BIT(7)\|BIT(0)` 是直接赋值不是 OR 操作 | `uart_hal.c` L163 | 假设 init 前 `UART2CON` 一定为 0；若 boot ROM 默认有任何残留位（如 TXPND/RXPND 只读位之外的可写位）会被清掉 | 工程未观察到问题；保守做法可用 `UART2CON \|= BIT(7)\|BIT(0)` 代替 |
 | 10 | `uart_hal.c` L160 `UART2BAUD = (baud_val<<16)\|baud_val;` 写全字，破坏 RXBAUD | 同上 | 同上——全字写入 OK，前提是 baud_val 在 [0,65535] 内（115200 时为 207） | 无影响 |
-| 11 | 软件 bit-bang 的 `delay_us(SOFT_BIT_US)` 是阻塞 104µs，**加上 GPIO 操作**实际略长——9600 实测波特率比理论稍低 | `uart_hal.c` L51–52；`test_uart_hal_refactor.md` §6 | LOOP 软+硬 256 字节 PASSED，但 §6 报告 RECV 软路 0x41 → 0xA1 偏移——与外部 PC UART 时序不完全匹配 | 已知问题，记入 `test_uart_hal_refactor.md` §6.4 已尝试 SOFT_HALF_US 47/52/56/60 均无改善；PC 端位时序/位序/编码需进一步排查 |
-| 12 | `my_printf_init(uart_putchar)` 在 `main.c` L250 才调，**之前**的 printf（如 `exception_isr`）若触发会使用 ROM 默认函数指针（NULL） | `main.c` L84–89 `exception_isr` 用 printf；`main.c` L250 `my_printf_init` | 启动早期若发生异常会因函数指针为 0 而 crash | ROM 默认行为需查 `reset.S`；建议在 `main.c` 最早阶段（WDT_DIS 后立即）就调 `my_printf_init` |
+| 11 | 软件 bit-bang 的 `delay_us(SOFT_BIT_US)` 是阻塞 104µs，**加上 GPIO 操作**实际略长——9600 实测波特率比理论稍低 | `uart_hal.c` L51–52；`test_uart_hal_refactor.md` §6 | LOOP 软+硬 256 字节 PASSED，但 §6 报告 RECV 软路 0x41 → 0xA1 偏移——与外部 PC UART 时序不完全匹配 | **仅限软 UART 外部接收**场景；硬件 UART2 走 Fsys 24MHz，baud 误差 < 0.2%。修法见 [test_uart_ringbuf.md §1.4](test_uart_ringbuf.md) |
+| 12 | `my_printf_init(uart_putchar)` 在 `main.c` L252 才调，**之前**的 printf（如 `exception_isr`）若触发会使用 ROM 默认函数指针（NULL） | `main.c` L84–89 `exception_isr` 用 printf；`main.c` L252 `my_printf_init` | 启动早期若发生异常会因函数指针为 0 而 crash | ROM 默认行为需查 `reset.S`；建议在 `main.c` 最早阶段（WDT_DIS 后立即）就调 `my_printf_init` |
 
 ### 8.3 总结
 
-本工程 UART 子系统的寄存器操作与手册 §6.2、§3.2、§3.3 完全一致；引脚映射与 `bt892x_pinfunction.md` §4.2 / §8.1 一致；时钟源选择正确（24 MHz 系统时钟）；波特率计算正确（115200 → BAUD=207）；TX/RX PND 处理符合手册（TXPND 写 DATA 自清 / RXPND 需显式清）。HAL 版（`uart_hal.c`）相对裸版本（`test_uart.c`）在工程稳健性上更优：显式清 RXPND + 默认 PB2 输入避免双 driver 噪声 + 还原 printf 防 console 残留。**疑点 1 + 疑点 2**（RXPND 清 + 重复实现）是下一轮重构可重点解决的问题；其余疑点为历史稳定性遗留，不影响当前功能。
+本工程 UART 子系统的寄存器操作与手册 §6.2、§3.2、§3.3 完全一致；引脚映射与 `bt892x_pinfunction.md` §4.2 / §8.1 一致；时钟源选择正确（24 MHz 系统时钟）；波特率计算正确（115200 → BAUD=207）；TX/RX PND 处理符合手册（TXPND 写 DATA 自清 / RXPND 需显式清）。
+
+**HAL 重构完成（commit `629ed39`）**：所有 `test_uart.c` 测试入口走 `uart_hal_*`，消除 init/putc/getc 重复实现。**疑点 1 + 2 + 3** 全部解决。
+
+**新增已知问题（commit `acfb23e` 暴露）**：轮询 RECV 在 115200 baud 下掉字节——per-byte echo 把 printf 耗时放大，PC 突发 3–4 字节在 printf 阻塞期间被硬件 DATA 寄存器覆盖丢失。**已写设计文档**（[test_uart_ringbuf.md](test_uart_ringbuf.md)）但代码未合入；待用户测试通过后另起 commit。
+
+其余疑点为历史稳定性遗留，不影响当前功能。
