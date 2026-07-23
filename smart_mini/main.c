@@ -53,7 +53,7 @@ extern void test_adkey_hold_run(void);
 // ---- UART：软/硬各一份，共用 PB2(TX)/PB1(RX)，一次只开一个 ----
 // #define TEST_UART_EN    1        // 硬件 UART2 回环 (跳线 PB2<->PB1)
 // #define TEST_UART_SEND_EN  1   // 硬件 UART2 持续发送 (PB2->USB-TTL)
- #define TEST_UART_RECV_EN  1   // 硬件 UART2 持续接收 (USB-TTL->PB1)
+// #define TEST_UART_RECV_EN  1   // 硬件 UART2 持续接收 (USB-TTL->PB1)
 // #define TEST_UART_CONSOLE_EN 1  // 硬件 UART2 收发回显 + printf 重定向到 UART2 (PB2/PB1)
 // #define TEST_UART_SOFT_EN  1     // 软件 bit-bang UART 回环 (跳线 PB2<->PB1, 9600 8N1)
 // ---- SPI：软/硬共用 PE4=CS/PE6=CLK/PE7=MOSI/PE5=MISO，一次只开一个 ----
@@ -65,12 +65,13 @@ extern void test_adkey_hold_run(void);
 // #define TEST_SPI_W25Q64_EN       1  // Flash 接法：软硬 W25Q64 全套（CS=PE4/CLK=PE6/DI=PE7/DO=PE5）
 // #define TEST_SPI_SOFT_ASM_EN     1  // 纯 GPIO：软件 bit-bang C vs ASM 速度对比
 // #define TEST_SPI_TIMING_EN       1  // Flash 接法：polling/INT/DMA 时间对比
+// ---- I2C：4个测试，PE6=SCL，PE7=SDA ----
 // #define TEST_I2C_EN    1
 // #define TEST_I2C_LA_EN   1
 // #define TEST_I2C_GPIO_EN      1
 //#define TEST_I2C_GPIO_LA_EN   1
 // ---- ADKEY：原始值 / 三键映射 / 消抖 / 长按 / 连发一次只开一个 ----
-// #define TEST_ADKEY_RAW_EN      1
+ #define TEST_ADKEY_RAW_EN      1
 // #define TEST_ADKEY_MAP_EN      1
 // #define TEST_ADKEY_DEBOUNCE_EN 1
 // #define TEST_ADKEY_LONG_EN     1

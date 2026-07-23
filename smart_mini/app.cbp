@@ -59,6 +59,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="test/spi_hal.h" />
+		<Unit filename="test/i2c_hal.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/i2c_hal.h" />
 		<Unit filename="test/test_common.h" />
 		<Unit filename="test/test_adkey.c">
 			<Option compilerVar="CC" />
