@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="app" />
+		<Option pch_mode="2" />
+		<Option compiler="riscv32" />
+		<Build>
+			<Target title="Debug">
+				<Option output="Output/bin/app.rv32" prefix_auto="1" extension_auto="0" />
+				<Option object_output="Output/obj/" />
+				<Option type="1" />
+				<Option compiler="riscv32" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-DUART_MODE=1" />
+					<Add option="-DUART_RECV_MODE=2" />
+					<Add option="-DSPI_SW_W25_EXP=2" />
+				</Compiler>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Os" />
+			<Add option="-Wall" />
+			<Add option="-march=rv32imac" />
+			<Add directory="./header/" />
+			<Add directory="." />
+		</Compiler>
+		<Linker>
+			<Add option="-Tram.ld" />
+			<Add option="-Map=Output\bin\map.txt" />
+		</Linker>
+		<ExtraCommands>
+			<Add after="Output\bin\postbuild.bat $(PROJECT_NAME)" />
+		</ExtraCommands>
+		<Unit filename="Output/bin/map.txt" />
+		<Unit filename="header/bs_x1_inst.h" />
+		<Unit filename="header/bs_x1_pulp.h" />
+		<Unit filename="header/clib.h" />
+		<Unit filename="header/global.h" />
+		<Unit filename="header/include.h" />
+		<Unit filename="header/int.h" />
+		<Unit filename="header/macro.h" />
+		<Unit filename="header/sfr.h" />
+		<Unit filename="header/sys.h" />
+		<Unit filename="header/typedef.h" />
+		<Unit filename="interrupt.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ram.ld">
+			<Option compile="1" />
+			<Option compiler="riscv32" use="1" buildCommand=" " />
+		</Unit>
+		<Unit filename="reset.S" />
+		<Unit filename="test/spi_hal.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/spi_hal.h" />
+		<Unit filename="test/i2c_hal.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/i2c_hal.h" />
+		<Unit filename="test/test_common.h" />
+		<Unit filename="test/test_adkey.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_adkey.h" />
+		<Unit filename="test/test_gpio.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_gpio.h" />
+		<Unit filename="test/test_i2c.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c.h" />
+		<Unit filename="test/test_i2c_gpio.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_gpio.h" />
+		<Unit filename="test/test_i2c_gpio_la.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_gpio_la.h" />
+		<Unit filename="test/test_i2c_la.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_i2c_la.h" />
+		<Unit filename="test/test_spi_loop.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_loop.h" />
+		<Unit filename="test/test_spi_soft_asm.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_soft_asm.h" />
+		<Unit filename="test/test_spi_timing.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_timing.h" />
+		<Unit filename="test/test_spi_w25q64.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_w25q64.h" />
+		<Unit filename="test/test_spi_wave.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_spi_wave.h" />
+		<Unit filename="test/test_timer.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_timer.h" />
+		<Unit filename="test/test_timer_pwm.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_timer_pwm.h" />
+		<Unit filename="test/test_uart.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/test_uart.h" />
+		<Unit filename="test/uart_hal.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/uart_hal.h" />
+		<Extensions>
+			<lib_finder disable_auto="1" />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

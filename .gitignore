@@ -1,0 +1,31 @@
+# ===== 构建产物 =====
+# Output/obj/ 仍忽略（纯 obj 中间产物，可重新编译）
+smart_mini/Output/obj/
+*.o
+
+# Output/bin/ 不再忽略 — app.rv32 / app.bin / app.dcf / map.txt / postbuild.bat 全部入库，
+# 防止不同机器环境差异导致烧录/编译失败
+# （*.rv32 / *.bin / *.dcf / *.map / *.lst / *.xm 也仅此一处使用，同步解除忽略）
+
+# ===== CodeBlocks 临时 =====
+smart_mini/app.layout
+smart_mini/obj/
+smart_mini/bin/
+*.depend
+
+# ===== 操作系统 =====
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== Office 锁文件 =====
+~$*.xlsx
+~$*.docx
+~$*.xls
