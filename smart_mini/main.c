@@ -71,11 +71,11 @@ extern void test_adkey_hold_run(void);
 // #define TEST_I2C_GPIO_EN      1
 //#define TEST_I2C_GPIO_LA_EN   1
 // ---- ADKEY：原始值 / 三键映射 / 消抖 / 长按 / 连发一次只开一个 ----
- #define TEST_ADKEY_RAW_EN      1
+// #define TEST_ADKEY_RAW_EN      1
 // #define TEST_ADKEY_MAP_EN      1
 // #define TEST_ADKEY_DEBOUNCE_EN 1
 // #define TEST_ADKEY_LONG_EN     1
-//#define TEST_ADKEY_HOLD_EN     1
+#define TEST_ADKEY_HOLD_EN     1
 
 AT(.com_rodata.exception)
 const char str_cpu_error[] = "ERR: %x, EPC: %x\n";

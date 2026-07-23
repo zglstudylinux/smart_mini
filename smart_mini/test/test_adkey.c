@@ -48,6 +48,7 @@
 
 static volatile u32 g_adkey_scan_tick = 0;
 
+// 初始化 SARADC 时钟、PB5/ADC12 双上拉、使能模拟模块
 static void test_adkey_raw_init(void)
 {
     // SARADC 时钟：x24m_clkdiv4 = 6MHz，并打开 SARADC 时钟门。
@@ -78,6 +79,7 @@ static void test_adkey_raw_init(void)
             | SARADC_CH12_PULLUP_EN;
 }
 
+// 启动一次 ADC12 转换并轮询等待完成，超时 5ms 返回 false
 static bool test_adkey_raw_read(u32 *raw)
 {
     u32 start;
@@ -96,6 +98,7 @@ static bool test_adkey_raw_read(u32 *raw)
     return true;
 }
 
+// 阶段一：每 100ms 打印 ADC12 原始值，并按 10 个样本汇总 1s 窗口 min/max/span
 void test_adkey_raw_run(void)
 {
     u32 raw;
@@ -104,13 +107,13 @@ void test_adkey_raw_run(void)
     u32 window_count = 0;
     u32 sample_count = 0;
 
-    TEST_LOG("========================================");
-    TEST_LOG("ADKEY stage 1: PB5 / ADC12 raw sampling");
-    TEST_LOG("SARADC clock: x24m/4=6MHz, baud=5, ADC clock=500kHz");
-    TEST_LOG("PB5 pull-up: GPIO 10K + ADC12 100K");
-    TEST_LOG("SARADC analog auto-enable: ADCAEN=1, ADCANGIO=1");
-    TEST_LOG("Press in order: NONE -> PLAY -> PREV -> NEXT");
-    TEST_LOG("========================================");
+    printf("========================================\n");
+    printf("ADKEY stage 1: PB5 / ADC12 raw sampling\n");
+    printf("SARADC clock: x24m/4=6MHz, baud=5, ADC clock=500kHz\n");
+    printf("PB5 pull-up: GPIO 10K + ADC12 100K\n");
+    printf("SARADC analog auto-enable: ADCAEN=1, ADCANGIO=1\n");
+    printf("Press in order: NONE -> PLAY -> PREV -> NEXT\n");
+    printf("========================================\n");
 
     test_adkey_raw_init();
 
@@ -126,17 +129,17 @@ void test_adkey_raw_run(void)
                 window_max = raw;
             }
 
-            TEST_LOG("ADC12 raw=%u sample=%u", raw, sample_count);
+            printf("ADC12 raw=%u sample=%u\n", raw, sample_count);
 
             if (window_count >= ADKEY_WINDOW_SAMPLES) {
-                TEST_LOG("1s window: min=%u max=%u span=%u",
+                printf("1s window: min=%u max=%u span=%u\n",
                          window_min, window_max, window_max - window_min);
                 window_min = SARADC_DATA_MASK;
                 window_max = 0;
                 window_count = 0;
             }
         } else {
-            TEST_LOG("[TIMEOUT] ADC12 conversion did not finish in %u us",
+            printf("[TIMEOUT] ADC12 conversion did not finish in %u us\n",
                      (u32)SARADC_TIMEOUT_US);
         }
 
@@ -144,6 +147,7 @@ void test_adkey_raw_run(void)
     }
 }
 
+// 单次 ADC 原始值映射为按键；121 死区返回 KEY_UNKNOWN
 static u8 test_adkey_map_raw(u32 raw)
 {
     if (raw <= ADKEY_PLAY_MAX) {
@@ -161,6 +165,7 @@ static u8 test_adkey_map_raw(u32 raw)
     return KEY_UNKNOWN;
 }
 
+// 按键枚举 → 可读字符串（NONE / PLAY / PREV / NEXT / UNKNOWN）
 static const char *test_adkey_key_name(u8 key)
 {
     switch (key) {
@@ -177,27 +182,28 @@ static const char *test_adkey_key_name(u8 key)
     }
 }
 
+// 阶段二：每 100ms 读 ADC 并打印 raw → key 映射结果（无消抖）
 void test_adkey_map_run(void)
 {
     u32 raw;
     u8 key;
 
-    TEST_LOG("========================================");
-    TEST_LOG("ADKEY stage 2: PB5 / ADC12 key mapping");
-    TEST_LOG("PB5 pull-up: GPIO 10K + ADC12 100K");
-    TEST_LOG("Map: <=69 PLAY, <=117 PREV, <=120 NEXT, 121 UNKNOWN, >=122 NONE");
-    TEST_LOG("No debounce yet: repeated lines and transition UNKNOWN are expected");
-    TEST_LOG("========================================");
+    printf("========================================\n");
+    printf("ADKEY stage 2: PB5 / ADC12 key mapping\n");
+    printf("PB5 pull-up: GPIO 10K + ADC12 100K\n");
+    printf("Map: <=69 PLAY, <=117 PREV, <=120 NEXT, 121 UNKNOWN, >=122 NONE\n");
+    printf("No debounce yet: repeated lines and transition UNKNOWN are expected\n");
+    printf("========================================\n");
 
     test_adkey_raw_init();
 
     while (1) {
         if (test_adkey_raw_read(&raw)) {
             key = test_adkey_map_raw(raw);
-            TEST_LOG("ADC12 raw=%u -> key=%s code=0x%02x",
+            printf("ADC12 raw=%u -> key=%s code=0x%02x\n",
                      raw, test_adkey_key_name(key), (u32)key);
         } else {
-            TEST_LOG("[TIMEOUT] ADC12 conversion did not finish in %u us",
+            printf("[TIMEOUT] ADC12 conversion did not finish in %u us\n",
                      (u32)SARADC_TIMEOUT_US);
         }
 
@@ -205,6 +211,7 @@ void test_adkey_map_run(void)
     }
 }
 
+// TMR1 5ms ISR：清挂起 + 递增 g_adkey_scan_tick（不在 ISR 内读 ADC/打印）
 AT(.com_text.isr)
 static void test_adkey_timer1_isr(void)
 {
@@ -212,6 +219,7 @@ static void test_adkey_timer1_isr(void)
     g_adkey_scan_tick++;
 }
 
+// 配置 TMR1 为 5ms 周期中断，注册 ISR 并使能 IRQ
 static void test_adkey_timer1_init(void)
 {
     TMR1CON = 0;
@@ -230,23 +238,25 @@ static void test_adkey_timer1_init(void)
     PICEN |= BIT(IRQ_TMR1_VECTOR);
 }
 
+// 在稳定键切换时发边沿消息：先 old 的 SHORT_UP，再 new 的 SHORT
 static void test_adkey_emit_transition(u8 old_key, u8 new_key, u32 raw)
 {
     u16 message;
 
     if (old_key != KEY_NONE) {
         message = (u16)(KEY_SHORT_UP | old_key);
-        TEST_LOG("msg=0x%04x KEY_SHORT_UP %s raw=%u",
+        printf("msg=0x%04x KEY_SHORT_UP %s raw=%u\n",
                  (u32)message, test_adkey_key_name(old_key), raw);
     }
 
     if (new_key != KEY_NONE) {
         message = (u16)(KEY_SHORT | new_key);
-        TEST_LOG("msg=0x%04x KEY_SHORT %s raw=%u",
+        printf("msg=0x%04x KEY_SHORT %s raw=%u\n",
                  (u32)message, test_adkey_key_name(new_key), raw);
     }
 }
 
+// 阶段三：TMR1 5ms 扫描，连续 5 次相同即认定为稳定消抖，输出 SHORT/SHORT_UP
 void test_adkey_debounce_run(void)
 {
     u32 handled_tick;
@@ -257,12 +267,12 @@ void test_adkey_debounce_run(void)
     u8 stable_key = KEY_NONE;
     u8 same_count = 0;
 
-    TEST_LOG("========================================");
-    TEST_LOG("ADKEY stage 3: 5ms x 5 debounce");
-    TEST_LOG("TMR1 scan period: 5ms; stable count: 5; debounce: 25ms");
-    TEST_LOG("Expected events: KEY_SHORT on stable press, KEY_SHORT_UP on stable release");
-    TEST_LOG("Long press and repeat are NOT implemented in this stage");
-    TEST_LOG("========================================");
+    printf("========================================\n");
+    printf("ADKEY stage 3: 5ms x 5 debounce\n");
+    printf("TMR1 scan period: 5ms; stable count: 5; debounce: 25ms\n");
+    printf("Expected events: KEY_SHORT on stable press, KEY_SHORT_UP on stable release\n");
+    printf("Long press and repeat are NOT implemented in this stage\n");
+    printf("========================================\n");
 
     test_adkey_raw_init();
     test_adkey_timer1_init();
@@ -276,7 +286,7 @@ void test_adkey_debounce_run(void)
         handled_tick = current_tick;
 
         if (!test_adkey_raw_read(&raw)) {
-            TEST_LOG("[TIMEOUT] ADC12 conversion did not finish in %u us",
+            printf("[TIMEOUT] ADC12 conversion did not finish in %u us\n",
                      (u32)SARADC_TIMEOUT_US);
             continue;
         }
@@ -307,15 +317,17 @@ void test_adkey_debounce_run(void)
     }
 }
 
+// 阶段四已并入阶段五；保留入口仅打印引导日志并死循环
 void test_adkey_long_run(void)
 {
-    TEST_LOG("ADKEY stage 4 has been merged into stage 5 (HOLD)");
-    TEST_LOG("Please enable TEST_ADKEY_HOLD_EN instead");
+    printf("ADKEY stage 4 has been merged into stage 5 (HOLD)\n");
+    printf("Please enable TEST_ADKEY_HOLD_EN instead\n");
     while (1) {
         delay_ms(1000);
     }
 }
 
+// 阶段五：完整状态机——SHORT → LONG(700ms) → 每 200ms HOLD → 松开发 LONG_UP
 void test_adkey_hold_run(void)
 {
     u32 handled_tick;
@@ -330,11 +342,11 @@ void test_adkey_hold_run(void)
     u8 same_count = 0;
     bool long_sent = false;
 
-    TEST_LOG("========================================");
-    TEST_LOG("ADKEY stage 5: 200ms HOLD repeat");
-    TEST_LOG("Scan: TMR1 5ms; debounce: 5 samples (25ms)");
-    TEST_LOG("Events: SHORT -> LONG at 700ms -> HOLD every 200ms -> LONG_UP on release");
-    TEST_LOG("========================================");
+    printf("========================================\n");
+    printf("ADKEY stage 5: 200ms HOLD repeat\n");
+    printf("Scan: TMR1 5ms; debounce: 5 samples (25ms)\n");
+    printf("Events: SHORT -> LONG at 700ms -> HOLD every 200ms -> LONG_UP on release\n");
+    printf("========================================\n");
 
     test_adkey_raw_init();
     test_adkey_timer1_init();
@@ -348,7 +360,7 @@ void test_adkey_hold_run(void)
         handled_tick = current_tick;
 
         if (!test_adkey_raw_read(&raw)) {
-            TEST_LOG("[TIMEOUT] ADC12 conversion did not finish in %u us",
+            printf("[TIMEOUT] ADC12 conversion did not finish in %u us\n",
                      (u32)SARADC_TIMEOUT_US);
             continue;
         }
@@ -380,12 +392,12 @@ void test_adkey_hold_run(void)
                 u16 release_message;
                 if (long_sent) {
                     release_message = (u16)(KEY_LONG_UP | old_key);
-                    TEST_LOG("msg=0x%04x KEY_LONG_UP %s held=%u ms raw=%u",
+                    printf("msg=0x%04x KEY_LONG_UP %s held=%u ms raw=%u\n",
                              (u32)release_message,
                              test_adkey_key_name(old_key), held_ms, raw);
                 } else {
                     release_message = (u16)(KEY_SHORT_UP | old_key);
-                    TEST_LOG("msg=0x%04x KEY_SHORT_UP %s held=%u ms raw=%u",
+                    printf("msg=0x%04x KEY_SHORT_UP %s held=%u ms raw=%u\n",
                              (u32)release_message,
                              test_adkey_key_name(old_key), held_ms, raw);
                 }
@@ -398,7 +410,7 @@ void test_adkey_hold_run(void)
             if (stable_key != KEY_NONE) {
                 u16 press_message = (u16)(KEY_SHORT | stable_key);
                 press_tick = current_tick;
-                TEST_LOG("msg=0x%04x KEY_SHORT %s raw=%u",
+                printf("msg=0x%04x KEY_SHORT %s raw=%u\n",
                          (u32)press_message,
                          test_adkey_key_name(stable_key), raw);
             }
@@ -413,7 +425,7 @@ void test_adkey_hold_run(void)
                       (ADKEY_SCAN_PERIOD_US / 1000u);
             long_sent = true;
             long_tick = current_tick;
-            TEST_LOG("msg=0x%04x KEY_LONG %s held=%u ms raw=%u",
+            printf("msg=0x%04x KEY_LONG %s held=%u ms raw=%u\n",
                      (u32)long_message,
                      test_adkey_key_name(stable_key), held_ms, raw);
         }
@@ -426,7 +438,7 @@ void test_adkey_hold_run(void)
             held_ms = (current_tick - press_tick) *
                       (ADKEY_SCAN_PERIOD_US / 1000u);
             long_tick = current_tick;
-            TEST_LOG("msg=0x%04x KEY_HOLD %s held=%u ms raw=%u",
+            printf("msg=0x%04x KEY_HOLD %s held=%u ms raw=%u\n",
                      (u32)hold_message,
                      test_adkey_key_name(stable_key), held_ms, raw);
         }
